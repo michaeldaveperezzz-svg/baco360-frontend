@@ -4,7 +4,7 @@
  */
 
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3000/api',
+  BASE_URL: import.meta.env.VITE_API_BASE_URL || 'https://baco360backend.onrender.com/api',
   TIMEOUT: Number(import.meta.env.VITE_API_TIMEOUT) || 30000,
   APP_NAME: import.meta.env.VITE_APP_NAME || 'Baco360',
 } as const
