@@ -40,8 +40,10 @@ This frontend is **fully configured** for Lavalust backend connection.
 
 ### Quick Setup:
 
-1. **Backend URL**: The Vite proxy forwards `/api` to the local Lavalust backend.
-   The default `.env` uses this same-origin path:
+1. **Backend URL**: With this project at `C:\wamp64\www\Baco360`, start WampServer
+   (Apache and MySQL) and the Vite proxy forwards `/api` to
+   `http://localhost/Baco360/baco360backend/public`. The default `.env` uses this
+   same-origin path:
    ```env
    VITE_API_BASE_URL=/api
    ```

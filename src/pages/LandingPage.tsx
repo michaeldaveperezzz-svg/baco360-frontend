@@ -25,7 +25,16 @@ const faqs = [
 
 function LandingBrand({ footer = false, siteName, logoPath }: { footer?: boolean; siteName: string; logoPath: string }) {
   return <div className={`brand landing-brand${footer ? ' landing-brand-footer' : ''}`} aria-label={`${siteName}, Municipality of Baco`}>
-    <img className="brand-seal" src={logoPath} alt="" />
+    <img
+      className="brand-seal"
+      src={logoPath}
+      alt=""
+      onError={(event) => {
+        if (event.currentTarget.getAttribute('src') !== '/Baco360logo.png') {
+          event.currentTarget.src = '/Baco360logo.png'
+        }
+      }}
+    />
     <span>{siteName}</span>
   </div>
 }

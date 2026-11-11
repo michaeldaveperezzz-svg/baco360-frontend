@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost/CiviConnect/baco360backend/public',
+        target: 'http://localhost/Baco360/baco360backend/public',
         changeOrigin: true,
         secure: false,
       }
