@@ -1,15 +1,17 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowLeft, ArrowRight, ShieldCheck } from 'lucide-react'
 import Brand from '../components/Brand'
+import GoogleSignInButton from '../components/GoogleSignInButton'
 
 interface Props { 
   onRegister: (name: string, email: string, phone: string, password: string, passwordConfirmation: string, emailEnabled: boolean, smsEnabled: boolean) => void | Promise<void>
   onBack: () => void 
   onOpenLegal: (document: 'terms' | 'privacy') => void
+  onGoogleSignIn: (idToken: string, intent: 'sign_in' | 'sign_up') => Promise<void>
   modal: true
 }
 
-export default function RegisterPage({ onRegister, onBack, onOpenLegal, modal }: Props) {
+export default function RegisterPage({ onRegister, onBack, onOpenLegal, onGoogleSignIn, modal }: Props) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -106,6 +108,14 @@ export default function RegisterPage({ onRegister, onBack, onOpenLegal, modal }:
               <span>I agree to the <button type="button" className="legal-link" onClick={() => onOpenLegal('terms')}>Terms and Conditions</button> and <button type="button" className="legal-link" onClick={() => onOpenLegal('privacy')}>Privacy Policy</button>.</span>
             </label>
           </form>
+          <div className="auth-divider"><span>Or sign up with</span></div>
+          <GoogleSignInButton
+            intent="sign_up"
+            onCredential={async (idToken, intent) => {
+              if (!acceptedTerms) throw new Error('Please accept the Terms and Conditions and Privacy Policy first.')
+              await onGoogleSignIn(idToken, intent)
+            }}
+          />
         </div>
         <span className="auth-help">Already have an account? <a href="#login" onClick={onBack}>Sign in</a></span>
       </main>

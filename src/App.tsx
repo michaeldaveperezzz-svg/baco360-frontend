@@ -68,7 +68,6 @@ function AppContent() {
   })
   const [hasAnnouncementDeepLink] = useState(() => new URLSearchParams(window.location.search).get('announcements') === '1')
   const [pendingAuthEmail, setPendingAuthEmail] = useState('')
-  const [pendingVerificationEmail, setPendingVerificationEmail] = useState('')
   const [loginSuccessMessage, setLoginSuccessMessage] = useState<string | null>(null)
   const [successNotice, setSuccessNotice] = useState<{ id: number; message: string } | null>(null)
   const nextSuccessIdRef = useRef(0)
@@ -411,45 +410,20 @@ function AppContent() {
     }
   }
   async function handle2FAVerify(code: string, email: string) { await verify2FA(code, email) }
-  async function registerUser(name: string, email: string, phone: string, password: string, passwordConfirmation: string, emailEnabled: boolean, smsEnabled: boolean): Promise<boolean> {
+  async function registerUser(name: string, email: string, phone: string, password: string, passwordConfirmation: string, emailEnabled: boolean, smsEnabled: boolean): Promise<void> {
     const response = await authService.register({ name, email, phone, password, password_confirmation: passwordConfirmation, email_enabled: emailEnabled, sms_enabled: smsEnabled })
-    if (response.success) {
-      if (response.data?.verification_required) {
-        setPendingVerificationEmail(response.data.email)
-        return true
-      } else {
-        setLoginSuccessMessage('Account created. You can now sign in.')
-        return false
-      }
-    } else {
-      throw new Error(response.message || 'Registration failed')
+    if (!response.success) throw new Error(response.message || 'Registration failed')
+    setLoginSuccessMessage('Account created. You can now sign in.')
+  }
+  async function handleGoogleSignIn(idToken: string, intent: 'sign_in' | 'sign_up') {
+    setLoginSuccessMessage(null)
+    const response = await authService.googleSignIn(idToken, intent)
+    const result = response.data
+    if (!response.success || !result?.user || !result.tokens?.access_token || !result.tokens?.refresh_token) {
+      throw new Error(response.message || 'Google sign-in failed. Please try again.')
     }
-  }
-  async function verifyEmail(code: string) {
-    const response = await authService.verifyEmail(pendingVerificationEmail, code)
-    const verification = response.data
-    if (!response.success || !verification?.user || !verification.tokens?.access_token || !verification.tokens?.refresh_token) {
-      throw new Error(response.message || 'Email verification failed')
-    }
-    authenticateWithTokens(verification.user, verification.tokens.access_token, verification.tokens.refresh_token)
-    setView(verification.user.role === 'staff' ? 'staff-dashboard' : verification.user.role === 'admin' ? 'admin-dashboard' : 'resident-dashboard')
-  }
-  async function resendVerification(email: string = pendingVerificationEmail) {
-    const response = await authService.resendVerification(email)
-    if (!response.success) throw new Error(response.message || 'Could not resend the verification code')
-  }
-  async function resendVerificationFromLogin(email: string) {
-    await resendVerification(email)
-    setPendingVerificationEmail(email)
-  }
-  async function requestPasswordReset(email: string) {
-    const response = await authService.forgotPassword(email)
-    if (!response.success) throw new Error(response.message || 'Could not send a password reset code.')
-  }
-  async function resetPassword(email: string, code: string, password: string, confirmation: string) {
-    const response = await authService.resetPassword(email, code, password, confirmation)
-    if (!response.success) throw new Error(response.message || 'Could not reset the password.')
-    setLoginSuccessMessage('Password reset successfully. Sign in with your new password.')
+    authenticateWithTokens(result.user, result.tokens.access_token, result.tokens.refresh_token)
+    setView(result.user.role === 'staff' ? 'staff-dashboard' : result.user.role === 'admin' ? 'admin-dashboard' : 'resident-dashboard')
   }
   async function addUser(data: CreateUserData) {
     const response = await userService.createUser(data)
@@ -531,7 +505,7 @@ function AppContent() {
   async function handleLogout() { await logout(); setView('landing'); setReports([]); setCategories([]); setUsers([]) }
 
   if (isAuthLoading) return <div className="auth-loading" role="status">Restoring your session...</div>
-  if (view === 'landing') return <LandingPage onLogin={handleLogin} onRegister={registerUser} onResendVerification={resendVerificationFromLogin} onVerifyEmail={verifyEmail} verificationEmail={pendingVerificationEmail} onForgotPassword={requestPasswordReset} onResetPassword={resetPassword} successMessage={loginSuccessMessage} />
+  if (view === 'landing') return <LandingPage onLogin={handleLogin} onRegister={registerUser} onGoogleSignIn={handleGoogleSignIn} successMessage={loginSuccessMessage} />
   if (view === '2fa') return <><div className="auth-wrapper"><LanguageSelect language={language} onLanguageChange={changeLanguage} /><TwoFactorAuthPage email={pendingAuthEmail} onVerify={handle2FAVerify} onBack={() => setView('landing')} /></div></>
   return <>
     <div className={`app-shell${role === 'resident' ? ' app-shell--resident' : ''}`}>

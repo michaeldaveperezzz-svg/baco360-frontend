@@ -1,0 +1,14 @@
+ .env.example                          |   3 [32m+[m
+ README.md                             |  16 [32m+[m[31m--[m
+ src/App.css                           |   6 [32m++[m
+ src/App.tsx                           |  50 [32m+++[m[31m------[m
+ src/components/GoogleSignInButton.tsx | 122 [32m++++++++++++++++++++++[m
+ src/components/ProfilePhoto.tsx       |  12 [32m++[m[31m-[m
+ src/config/api.config.ts              |   8 [32m+[m[31m-[m
+ src/i18n.ts                           |   1 [31m-[m
+ src/pages/LandingPage.tsx             | 186 [32m+++[m[31m-------------------------------[m
+ src/pages/LoginPage.tsx               |  27 [32m+[m[31m----[m
+ src/pages/RegisterPage.tsx            |  12 [32m++[m[31m-[m
+ src/services/auth.service.ts          |  62 [32m++[m[31m----------[m
+ vite.config.ts                        |  30 [32m+++[m[31m---[m
+ 13 files changed, 221 insertions(+), 314 deletions(-)

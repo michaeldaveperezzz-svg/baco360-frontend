@@ -17,7 +17,10 @@ export default function ProfilePhoto({ user, name, className, previewUrl }: Prof
   const initials = name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toLocaleUpperCase()).join('')
 
   useEffect(() => {
-    if (previewUrl || !photoKey) return
+    if (previewUrl || !photoKey) {
+      setLoadedPhoto(null)
+      return
+    }
 
     const controller = new AbortController()
     let objectUrl: string | null = null
@@ -30,7 +33,10 @@ export default function ProfilePhoto({ user, name, className, previewUrl }: Prof
       objectUrl = URL.createObjectURL(response.data)
       setLoadedPhoto({ key: photoKey, url: objectUrl })
     }).catch((error: unknown) => {
-      if (!controller.signal.aborted) console.error('Failed to load profile photo:', handleApiError(error).message)
+      if (!controller.signal.aborted) {
+        setLoadedPhoto(null)
+        console.error('Failed to load profile photo:', handleApiError(error).message)
+      }
     })
 
     return () => {
@@ -40,6 +46,6 @@ export default function ProfilePhoto({ user, name, className, previewUrl }: Prof
   }, [photoKey, previewUrl, user.id, user.profile_photo])
 
   return photoUrl
-    ? <img className={className} src={photoUrl} alt={`${name} profile photo`} />
+    ? <img className={className} src={photoUrl} alt={`${name} profile photo`} onError={() => setLoadedPhoto(null)} />
     : <span className={className} aria-label={name}>{initials}</span>
 }

@@ -24,6 +24,11 @@ export interface RegisterData {
   sms_enabled?: boolean
 }
 
+export interface RegisterResponse {
+  email: string
+  verification_required: false
+}
+
 /**
  * Login response
  */
@@ -31,19 +36,6 @@ export interface LoginResponse {
   requires_2fa: boolean
   token?: string
   user?: User
-}
-
-export interface RegisterResponse {
-  email: string
-  verification_required: boolean
-}
-
-export interface EmailVerificationResponse {
-  user: User
-  tokens: {
-    access_token: string
-    refresh_token: string
-  }
 }
 
 /**
@@ -80,25 +72,14 @@ export const authService = {
     })
   },
 
-  /**
-   * Verify the email address used to register
-   */
-  async verifyEmail(email: string, code: string): Promise<ApiResponse<EmailVerificationResponse>> {
-    return apiRequest<EmailVerificationResponse>({
-      method: 'POST',
-      url: API_ENDPOINTS.VERIFY_EMAIL,
-      data: { email, code },
-    })
-  },
-
-  /**
-   * Resend a pending email verification code
-   */
-  async resendVerification(email: string): Promise<ApiResponse> {
+  async googleSignIn(idToken: string, intent: 'sign_in' | 'sign_up'): Promise<ApiResponse<{
+    user: User
+    tokens: { access_token: string; refresh_token: string }
+  }>> {
     return apiRequest({
       method: 'POST',
-      url: API_ENDPOINTS.RESEND_VERIFICATION,
-      data: { email },
+      url: API_ENDPOINTS.GOOGLE_SIGN_IN,
+      data: { id_token: idToken, intent },
     })
   },
 
@@ -143,25 +124,4 @@ export const authService = {
     })
   },
 
-  /**
-   * Forgot password
-   */
-  async forgotPassword(email: string): Promise<ApiResponse> {
-    return apiRequest({
-      method: 'POST',
-      url: API_ENDPOINTS.FORGOT_PASSWORD,
-      data: { email },
-    })
-  },
-
-  /**
-   * Reset password
-   */
-  async resetPassword(email: string, code: string, password: string, password_confirmation: string): Promise<ApiResponse> {
-    return apiRequest({
-      method: 'POST',
-      url: API_ENDPOINTS.RESET_PASSWORD,
-      data: { email, code, password, password_confirmation },
-    })
-  },
 }

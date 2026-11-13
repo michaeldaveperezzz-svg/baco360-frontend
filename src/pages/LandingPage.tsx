@@ -1,18 +1,14 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowDown, ArrowLeft, ArrowRight, CircleHelp, FilePlus2, MailCheck, MapPinned, MessageSquareText, ShieldCheck, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, CircleHelp, FilePlus2, MapPinned, MessageSquareText, ShieldCheck, X } from 'lucide-react'
 import LoginPage from './LoginPage'
 import RegisterPage from './RegisterPage'
 import { websiteContentImageUrl, websiteContentService, type WebsiteContentData } from '../services/websiteContent.service'
 
 interface Props {
   onLogin: (email: string, password: string, remember: boolean) => void | Promise<void>
-  onRegister: (name: string, email: string, phone: string, password: string, passwordConfirmation: string, emailEnabled: boolean, smsEnabled: boolean) => boolean | Promise<boolean>
-  onResendVerification: (email: string) => void | Promise<void>
-  onVerifyEmail: (code: string) => void | Promise<void>
-  verificationEmail: string
-  onForgotPassword: (email: string) => Promise<void>
-  onResetPassword: (email: string, code: string, password: string, confirmation: string) => Promise<void>
+  onRegister: (name: string, email: string, phone: string, password: string, passwordConfirmation: string, emailEnabled: boolean, smsEnabled: boolean) => void | Promise<void>
+  onGoogleSignIn: (idToken: string, intent: 'sign_in' | 'sign_up') => Promise<void>
   successMessage?: string | null
 }
 
@@ -20,7 +16,7 @@ const faqs = [
   { question: 'What can I report through Baco360?', answer: 'You can submit community concerns such as road damage, flooding, waste concerns, street-light issues, and other local service needs.' },
   { question: 'How do I follow the progress of a report?', answer: 'Create an account, sign in, and open My reports to review status updates and messages from the municipal team.' },
   { question: 'Can I add photos and a location?', answer: 'Yes. The report form lets you describe the concern, provide its location, and attach photos when available.' },
-  { question: 'Do I need an account to submit a report?', answer: 'Sign up with your email address and verify it to submit reports and keep track of their progress.' },
+  { question: 'Do I need an account to submit a report?', answer: 'Create an account with your email and password or sign up with Google to submit reports and keep track of their progress.' },
 ]
 
 function LandingBrand({ footer = false, siteName, logoPath }: { footer?: boolean; siteName: string; logoPath: string }) {
@@ -39,16 +35,8 @@ function LandingBrand({ footer = false, siteName, logoPath }: { footer?: boolean
   </div>
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error) return error.message
-  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
-    return error.message
-  }
-  return fallback
-}
-
-export default function LandingPage({ onLogin, onRegister, onResendVerification, onVerifyEmail, verificationEmail, onForgotPassword, onResetPassword, successMessage }: Props) {
-  const [authModal, setAuthModal] = useState<'sign-in' | 'sign-up' | 'email-verification' | 'forgot-password' | 'reset-password' | null>(null)
+export default function LandingPage({ onLogin, onRegister, onGoogleSignIn, successMessage }: Props) {
+  const [authModal, setAuthModal] = useState<'sign-in' | 'sign-up' | null>(null)
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null)
   const [activeSection, setActiveSection] = useState(() => {
     const section = window.location.hash.slice(1)
@@ -56,20 +44,6 @@ export default function LandingPage({ onLogin, onRegister, onResendVerification,
   })
   const [websiteContent, setWebsiteContent] = useState<WebsiteContentData | null>(null)
   const [contentLoadError, setContentLoadError] = useState(false)
-  const [verificationCode, setVerificationCode] = useState('')
-  const [verificationError, setVerificationError] = useState<string | null>(null)
-  const [verificationNotice, setVerificationNotice] = useState<string | null>(null)
-  const [isVerifying, setIsVerifying] = useState(false)
-  const [isResending, setIsResending] = useState(false)
-  const [resetEmail, setResetEmail] = useState('')
-  const [resetCode, setResetCode] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [passwordConfirmation, setPasswordConfirmation] = useState('')
-  const [resetError, setResetError] = useState<string | null>(null)
-  const [resetNotice, setResetNotice] = useState<string | null>(null)
-  const [isSendingReset, setIsSendingReset] = useState(false)
-  const [isResettingPassword, setIsResettingPassword] = useState(false)
-
   useEffect(() => {
     let active = true
     async function loadWebsiteContent() {
@@ -92,102 +66,8 @@ export default function LandingPage({ onLogin, onRegister, onResendVerification,
   }, [])
 
   async function submitRegistration(...args: Parameters<Props['onRegister']>) {
-    setVerificationCode('')
-    setVerificationError(null)
-    setVerificationNotice(null)
-    const needsEmailVerification = await onRegister(...args)
-    setAuthModal(needsEmailVerification ? 'email-verification' : 'sign-in')
-  }
-
-  async function resendVerification(email: string) {
-    setVerificationError(null)
-    setVerificationNotice(null)
-    setIsResending(true)
-    try {
-      await onResendVerification(email)
-      setAuthModal('email-verification')
-      setVerificationNotice('A new code has been sent. Use the newest email; codes expire after 15 minutes.')
-    } catch (error) {
-      setVerificationError(error instanceof Error ? error.message : 'Could not resend the verification code.')
-      throw error
-    } finally {
-      setIsResending(false)
-    }
-  }
-
-  async function submitVerification(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setVerificationError(null)
-    setIsVerifying(true)
-    try {
-      await onVerifyEmail(verificationCode)
-    } catch (error) {
-      setVerificationError(error instanceof Error ? error.message : 'Could not verify your email.')
-    } finally {
-      setIsVerifying(false)
-    }
-  }
-
-  async function sendPasswordResetCode(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setResetError(null)
-    setResetNotice(null)
-    setIsSendingReset(true)
-    try {
-      await onForgotPassword(resetEmail.trim())
-      setResetNotice('If this is a verified account, a 6-digit reset code has been sent to your email.')
-      setResetCode('')
-      setNewPassword('')
-      setPasswordConfirmation('')
-      setAuthModal('reset-password')
-    } catch (error) {
-      setResetError(getErrorMessage(error, 'Could not request a password reset.'))
-    } finally {
-      setIsSendingReset(false)
-    }
-  }
-
-  async function resendPasswordResetCode() {
-    setResetError(null)
-    setResetNotice(null)
-    setIsSendingReset(true)
-    try {
-      await onForgotPassword(resetEmail.trim())
-      setResetNotice('If this is a verified account, a new code has been sent. Use the latest code.')
-      setResetCode('')
-    } catch (error) {
-      setResetError(getErrorMessage(error, 'Could not resend the reset code.'))
-    } finally {
-      setIsSendingReset(false)
-    }
-  }
-
-  async function submitPasswordReset(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setResetError(null)
-    if (newPassword !== passwordConfirmation) {
-      setResetError('Passwords do not match.')
-      return
-    }
-    setIsResettingPassword(true)
-    try {
-      await onResetPassword(resetEmail.trim(), resetCode, newPassword, passwordConfirmation)
-      setAuthModal('sign-in')
-    } catch (error) {
-      setResetError(getErrorMessage(error, 'Could not reset the password.'))
-    } finally {
-      setIsResettingPassword(false)
-    }
-  }
-
-  function openPasswordReset(email: string) {
-    setResetEmail(email)
-    setResetCode('')
-    setNewPassword('')
-    setPasswordConfirmation('')
-    setResetError(null)
-    setResetNotice(null)
-    setAuthModal('forgot-password')
+    await onRegister(...args)
+    setAuthModal('sign-in')
   }
 
   function scrollToSection(event: React.MouseEvent<HTMLAnchorElement>, sectionId: string) {
@@ -343,54 +223,12 @@ export default function LandingPage({ onLogin, onRegister, onResendVerification,
     {authModal && createPortal(<div className="landing-auth-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) setAuthModal(null)
     }}>
-      <section key={authModal} className="landing-auth-dialog" role="dialog" aria-modal="true" aria-label={authModal === 'sign-in' ? 'Sign in to Baco360' : authModal === 'sign-up' ? 'Sign up for Baco360' : authModal === 'email-verification' ? 'Verify your email' : authModal === 'forgot-password' ? 'Forgot password' : 'Reset your password'}>
+      <section key={authModal} className="landing-auth-dialog" role="dialog" aria-modal="true" aria-label={authModal === 'sign-in' ? 'Sign in to Baco360' : 'Sign up for Baco360'}>
         <button className="landing-auth-close" type="button" aria-label="Close dialog" onClick={() => setAuthModal(null)}><X size={19} /></button>
         <div className="landing-auth-dialog-scroll">
           {authModal === 'sign-in'
-            ? <LoginPage modal onLogin={onLogin} onRegister={() => setAuthModal('sign-up')} onResendVerification={resendVerification} onForgotPassword={openPasswordReset} successMessage={successMessage} />
-            : authModal === 'sign-up'
-              ? <RegisterPage modal onRegister={submitRegistration} onBack={() => setAuthModal('sign-in')} onOpenLegal={setLegalModal} />
-              : authModal === 'email-verification'
-                ? <div className="landing-verification">
-                <button className="back-link" type="button" onClick={() => setAuthModal('sign-in')} disabled={isVerifying || isResending}><ArrowLeft size={15} /> Back to sign in</button>
-                <span className="auth-step"><ShieldCheck size={15} /> EMAIL VERIFICATION</span>
-                <h2>Check your inbox.</h2>
-                <p className="landing-verification-copy">Enter the 6-digit code sent to <strong>{verificationEmail}</strong>.</p>
-                {verificationError && <p className="landing-verification-message is-error" role="alert">{verificationError}</p>}
-                {verificationNotice && <p className="landing-verification-message" role="status">{verificationNotice}</p>}
-                <form onSubmit={submitVerification}>
-                  <label className="field-label">Verification code<input required type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" disabled={isVerifying || isResending} /></label>
-                  <button className="button button-primary auth-submit" type="submit" disabled={isVerifying || isResending || verificationCode.length !== 6}>{isVerifying ? 'Verifying...' : 'Verify email'} <ArrowRight size={16} /></button>
-                </form>
-                <button className="button button-secondary landing-resend-code" type="button" onClick={() => { void resendVerification(verificationEmail).catch(() => undefined) }} disabled={isVerifying || isResending}>{isResending ? 'Sending...' : 'Resend code'} <MailCheck size={16} /></button>
-                </div>
-                : authModal === 'forgot-password'
-                  ? <div className="landing-password-reset">
-                    <button className="back-link" type="button" onClick={() => setAuthModal('sign-in')} disabled={isSendingReset}><ArrowLeft size={15} /> Back to sign in</button>
-                    <span className="auth-step"><ShieldCheck size={15} /> ACCOUNT RECOVERY</span>
-                    <h2>Forgot password?</h2>
-                    <p className="landing-verification-copy">Enter the verified email on your account. We’ll send a 6-digit reset code if it matches.</p>
-                    {resetError && <p className="landing-verification-message is-error" role="alert">{resetError}</p>}
-                    <form onSubmit={sendPasswordResetCode}>
-                      <label className="field-label">Verified email<input required type="email" autoComplete="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="you@example.com" disabled={isSendingReset} /></label>
-                      <button className="button button-primary auth-submit" type="submit" disabled={isSendingReset}>{isSendingReset ? 'Sending code...' : 'Send reset code'} <ArrowRight size={16} /></button>
-                    </form>
-                  </div>
-                  : <div className="landing-password-reset">
-                    <button className="back-link" type="button" onClick={() => setAuthModal('forgot-password')} disabled={isResettingPassword || isSendingReset}><ArrowLeft size={15} /> Change email</button>
-                    <span className="auth-step"><ShieldCheck size={15} /> RESET PASSWORD</span>
-                    <h2>Enter your reset code.</h2>
-                    <p className="landing-verification-copy">Check <strong>{resetEmail}</strong> for the 6-digit code. It expires in 15 minutes.</p>
-                    {resetNotice && <p className="landing-verification-message" role="status">{resetNotice}</p>}
-                    {resetError && <p className="landing-verification-message is-error" role="alert">{resetError}</p>}
-                    <form onSubmit={submitPasswordReset}>
-                      <label className="field-label">Reset code<input required type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} value={resetCode} onChange={(event) => setResetCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" disabled={isResettingPassword || isSendingReset} /></label>
-                      <label className="field-label">New password<input required minLength={8} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="At least 8 characters" disabled={isResettingPassword || isSendingReset} /></label>
-                      <label className="field-label">Confirm new password<input required minLength={8} type="password" autoComplete="new-password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} placeholder="Re-enter password" disabled={isResettingPassword || isSendingReset} /></label>
-                      <button className="button button-primary auth-submit" type="submit" disabled={isResettingPassword || isSendingReset}>{isResettingPassword ? 'Saving password...' : 'Save new password'} <ArrowRight size={16} /></button>
-                    </form>
-                    <button className="button button-secondary landing-resend-code" type="button" onClick={() => void resendPasswordResetCode()} disabled={isResettingPassword || isSendingReset}>{isSendingReset ? 'Sending...' : 'Resend reset code'} <MailCheck size={16} /></button>
-                  </div>}
+            ? <LoginPage modal onLogin={onLogin} onRegister={() => setAuthModal('sign-up')} onGoogleSignIn={onGoogleSignIn} successMessage={successMessage} />
+            : <RegisterPage modal onRegister={submitRegistration} onBack={() => setAuthModal('sign-in')} onOpenLegal={setLegalModal} onGoogleSignIn={onGoogleSignIn} />}
         </div>
       </section>
       {legalModal && <div className="landing-legal-backdrop" role="presentation" onMouseDown={(event) => {

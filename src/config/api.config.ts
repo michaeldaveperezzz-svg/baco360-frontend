@@ -4,22 +4,20 @@
  */
 
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_BASE_URL || 'https://baco360backend.onrender.com/api',
+  BASE_URL: import.meta.env.VITE_API_BASE_URL || '/api',
   TIMEOUT: Number(import.meta.env.VITE_API_TIMEOUT) || 30000,
   APP_NAME: import.meta.env.VITE_APP_NAME || 'Baco360',
+  GOOGLE_CLIENT_ID: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
 } as const
 
 export const API_ENDPOINTS = {
   // Authentication
   LOGIN: '/auth/login',
   REGISTER: '/auth/register',
+  GOOGLE_SIGN_IN: '/auth/google',
   LOGOUT: '/auth/logout',
   VERIFY_2FA: '/auth/verify-2fa',
-  VERIFY_EMAIL: '/auth/verify-email',
-  RESEND_VERIFICATION: '/auth/resend-verification',
   REFRESH_TOKEN: '/auth/refresh',
-  FORGOT_PASSWORD: '/auth/forgot-password',
-  RESET_PASSWORD: '/auth/reset-password',
   
   // User
   ME: '/user/me',

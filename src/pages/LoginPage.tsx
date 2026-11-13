@@ -1,17 +1,17 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowRight, Eye, EyeOff, ShieldCheck } from 'lucide-react'
 import Brand from '../components/Brand'
+import GoogleSignInButton from '../components/GoogleSignInButton'
 
 interface Props { 
   onLogin: (email: string, password: string, remember: boolean) => void | Promise<void>
   onRegister: () => void 
-  onResendVerification: (email: string) => void | Promise<void>
-  onForgotPassword: (email: string) => void
+  onGoogleSignIn: (idToken: string, intent: 'sign_in' | 'sign_up') => Promise<void>
   successMessage?: string | null
   modal: true
 }
 
-export default function LoginPage({ onLogin, onRegister, onResendVerification, onForgotPassword, successMessage, modal }: Props) {
+export default function LoginPage({ onLogin, onRegister, onGoogleSignIn, successMessage, modal }: Props) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [credentialsEditable, setCredentialsEditable] = useState(false)
@@ -19,7 +19,6 @@ export default function LoginPage({ onLogin, onRegister, onResendVerification, o
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [isResending, setIsResending] = useState(false)
   
   async function submit(event: FormEvent<HTMLFormElement>) { 
     event.preventDefault()
@@ -34,18 +33,6 @@ export default function LoginPage({ onLogin, onRegister, onResendVerification, o
     }
   }
 
-  async function resendVerification() {
-    setError(null)
-    setIsResending(true)
-    try {
-      await onResendVerification(email)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not resend the verification code.')
-    } finally {
-      setIsResending(false)
-    }
-  }
-  
   return (
     <div className={`auth-layout login-layout${modal ? ' auth-modal-form' : ''}`}>
       <aside className="auth-story">
@@ -114,17 +101,13 @@ export default function LoginPage({ onLogin, onRegister, onResendVerification, o
               <label>
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} disabled={isLoading} /> Remember me
               </label>
-              <button type="button" className="subtle-link" onClick={() => onForgotPassword(email)}>Forgot password?</button>
             </div>
             <button className="button button-primary auth-submit" type="submit" disabled={isLoading}>
               {isLoading ? 'Signing in...' : 'Continue'} <ArrowRight size={16} />
             </button>
           </form>
-          {error?.toLowerCase().includes('verify your email') && (
-            <button className="button button-secondary" type="button" onClick={resendVerification} disabled={isLoading || isResending || !email}>
-              {isResending ? 'Sending...' : 'Resend verification code'}
-            </button>
-          )}
+          <div className="auth-divider"><span>Or continue with</span></div>
+          <GoogleSignInButton intent="sign_in" onCredential={onGoogleSignIn} />
           <div className="auth-divider"><span>New to Baco360?</span></div>
           <button className="button button-secondary auth-register" type="button" onClick={onRegister} disabled={isLoading}>Create an account</button>
         </div>

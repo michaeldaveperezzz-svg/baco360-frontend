@@ -343,7 +343,6 @@ const translations: Record<string, string> = {
   'Password': 'Salita ng lihim',
   'Enter your password': 'Ilagay ang iyong password',
   'Remember me': 'Tandaan ako',
-  'Forgot password?': 'Nakalimutan ang password?',
   'Continue': 'Magpatuloy',
   'New to Baco360?': 'Bago sa Baco360?',
   'By continuing, you agree to our': 'Sa pagpapatuloy, sumasang-ayon ka sa aming',

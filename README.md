@@ -40,21 +40,25 @@ This frontend is **fully configured** for Lavalust backend connection.
 
 ### Quick Setup:
 
-1. **Backend URL**: With this project at `C:\wamp64\www\Baco360`, start WampServer
-   (Apache and MySQL) and the Vite proxy forwards `/api` to
-   `http://localhost/Baco360/baco360backend/public`. The default `.env` uses this
-   same-origin path:
+1. **Backend URL**: The default local target is a PHP built-in server at
+   `http://127.0.0.1:8080`, which works without WAMP. The default `.env` uses this:
    ```env
    VITE_API_BASE_URL=/api
+   VITE_API_PROXY_TARGET=http://127.0.0.1:8080
    ```
 
-2. **Start Development**:
+2. **Google Sign-In**: Create a Google OAuth Web application client ID and set
+   `VITE_GOOGLE_CLIENT_ID` in the frontend environment. Set the same client ID as
+   `GOOGLE_CLIENT_ID` in the backend environment. Add the deployed frontend origin
+   and `http://localhost:5173` to the OAuth client's authorized JavaScript origins.
+
+3. **Start Development**:
    ```bash
    npm run dev
    # Runs on http://localhost:5173
    ```
 
-3. **Use API Services**:
+4. **Use API Services**:
    ```tsx
    import { authService } from './services/auth.service'
    import { reportsService } from './services/reports.service'
