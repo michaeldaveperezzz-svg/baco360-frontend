@@ -19,6 +19,7 @@ interface HeaderProps {
   categories: Category[]
   users: User[]
   notifications: Notification[]
+  onOpenEmergencyContacts: () => void
   onOpenNotification: (notification: Notification) => Promise<void>
   onDeleteNotification: (notificationId: number) => Promise<void>
   onDeleteAllNotifications: () => Promise<void>
@@ -28,21 +29,24 @@ interface HeaderProps {
   onSearchUsers: (query: string) => void
   onUpdateProfile: (data: UpdateProfileData) => Promise<void>
   onChangePassword: (currentPassword: string, password: string, confirmation: string) => Promise<void>
+  onDeleteOwnAccount: (password: string) => Promise<void>
+  onDeactivateOwnAccount: (reason: string, reasonDetails: string) => Promise<void>
   onNavigateWebsiteContent: () => void
   onNavigateResidentProfile: () => void
   onUploadProfilePhoto: (file: File) => Promise<void>
   onRemoveProfilePhoto: () => Promise<void>
 }
 
-export default function Header({ role, user, language, onLanguageChange, onOpenLogin, reports, categories, users, notifications, onOpenNotification, onDeleteNotification, onDeleteAllNotifications, onMarkAllNotificationsRead, onSelectReport, onNavigate, onSearchUsers, onUpdateProfile, onChangePassword, onNavigateWebsiteContent, onNavigateResidentProfile, onUploadProfilePhoto, onRemoveProfilePhoto }: HeaderProps) {
+export default function Header({ role, user, language, onLanguageChange, onOpenLogin, reports, categories, users, notifications, onOpenEmergencyContacts, onOpenNotification, onDeleteNotification, onDeleteAllNotifications, onMarkAllNotificationsRead, onSelectReport, onNavigate, onSearchUsers, onUpdateProfile, onChangePassword, onDeleteOwnAccount, onDeactivateOwnAccount, onNavigateWebsiteContent, onNavigateResidentProfile, onUploadProfilePhoto, onRemoveProfilePhoto }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [showSignoutConfirmation, setShowSignoutConfirmation] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [signoutError, setSignoutError] = useState<string | null>(null)
   const [showNotifications, setShowNotifications] = useState(false)
-  const [showEmergencyContacts, setShowEmergencyContacts] = useState(false)
+  const [isClosingNotifications, setIsClosingNotifications] = useState(false)
   const [showAccountMenu, setShowAccountMenu] = useState(false)
+  const [isClosingAccountMenu, setIsClosingAccountMenu] = useState(false)
   const [notificationError, setNotificationError] = useState<string | null>(null)
   const [deletingNotificationId, setDeletingNotificationId] = useState<number | null>(null)
   const [clearingNotificationId, setClearingNotificationId] = useState<number | null>(null)
@@ -59,22 +63,31 @@ export default function Header({ role, user, language, onLanguageChange, onOpenL
   const unreadCount = notifications.filter((notification) => !notification.read_at).length
 
   useEffect(() => {
-    if (!showNotifications) return
+    if (!showNotifications || isClosingNotifications) return
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') setShowNotifications(false)
+      if (event.key === 'Escape') setIsClosingNotifications(true)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showNotifications])
+  }, [showNotifications, isClosingNotifications])
 
-  useEffect(() => {
-    if (!showEmergencyContacts) return
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') setShowEmergencyContacts(false)
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showEmergencyContacts])
+  function closeNotifications() {
+    if (showNotifications && !isClosingNotifications) setIsClosingNotifications(true)
+  }
+
+  function finishNotificationsClose() {
+    setShowNotifications(false)
+    setIsClosingNotifications(false)
+  }
+
+  function closeAccountMenu() {
+    if (showAccountMenu && !isClosingAccountMenu) setIsClosingAccountMenu(true)
+  }
+
+  function finishAccountMenuClose() {
+    setShowAccountMenu(false)
+    setIsClosingAccountMenu(false)
+  }
 
   const searchResults = useMemo(() => {
     const queryParts = searchQuery.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
@@ -198,7 +211,7 @@ export default function Header({ role, user, language, onLanguageChange, onOpenL
     setNotificationError(null)
     try {
       await onOpenNotification(notification)
-      setShowNotifications(false)
+      closeNotifications()
     } catch (error) {
       setNotificationError(error instanceof Error ? error.message : 'Unable to open this notification.')
     }
@@ -305,52 +318,43 @@ export default function Header({ role, user, language, onLanguageChange, onOpenL
         </div>}
       </form>
       <div className="topbar-actions">
-        {role === 'resident' && <button className="icon-button emergency-contacts-button" type="button" aria-label={language === 'tl' ? 'Mga emergency contact' : 'Emergency contacts'} aria-expanded={showEmergencyContacts} onClick={() => setShowEmergencyContacts(true)}><Phone size={19} /></button>}
+        {role === 'resident' && <button className="icon-button emergency-contacts-button" type="button" aria-label={language === 'tl' ? 'Mga emergency contact' : 'Emergency contacts'} aria-haspopup="dialog" onClick={onOpenEmergencyContacts}><Phone size={19} /></button>}
         <button className="icon-button notification-button" type="button" aria-label={language === 'tl' ? `Mga abiso, ${unreadCount} hindi pa nababasa` : `Notifications, ${unreadCount} unread`} aria-expanded={showNotifications} onClick={() => {
           setNotificationError(null)
+          setIsClosingNotifications(false)
           setShowNotifications(true)
         }}><Bell size={19} />{unreadCount > 0 && <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button>
         <div className="role-display" title={`Logged in as ${roleInfo.label}`}>
           {user ? <ProfilePhoto user={user} name={user.name} className="role-avatar" /> : <span className="role-avatar">{roleInfo.avatar}</span>}
           <span className="role-label">{roleInfo.label}</span>
         </div>
-        <button className="icon-button account-menu-trigger" type="button" aria-label={language === 'tl' ? 'Buksan ang menu ng account' : 'Open account menu'} aria-expanded={showAccountMenu} onClick={() => setShowAccountMenu(true)}><Menu size={21} /></button>
+        <button className="icon-button account-menu-trigger" type="button" aria-label={language === 'tl' ? 'Buksan ang menu ng account' : 'Open account menu'} aria-expanded={showAccountMenu} onClick={() => {
+          setIsClosingAccountMenu(false)
+          setShowAccountMenu(true)
+        }}><Menu size={21} /></button>
       </div>
     </header>
-    {showAccountMenu && user && <AccountMenu user={user} language={language} onLanguageChange={onLanguageChange} onClose={() => setShowAccountMenu(false)} onNavigateWebsiteContent={() => {
+    {showAccountMenu && user && <AccountMenu user={user} language={language} isClosing={isClosingAccountMenu} onCloseComplete={finishAccountMenuClose} onLanguageChange={onLanguageChange} onClose={closeAccountMenu} onNavigateWebsiteContent={() => {
       onNavigateWebsiteContent()
-      setShowAccountMenu(false)
+      closeAccountMenu()
     }} onNavigateResidentProfile={() => {
       onNavigateResidentProfile()
-      setShowAccountMenu(false)
+      closeAccountMenu()
     }} onSignOut={() => {
-      setShowAccountMenu(false)
+      closeAccountMenu()
       setSignoutError(null)
       setShowSignoutConfirmation(true)
-    }} onUpdateProfile={onUpdateProfile} onChangePassword={onChangePassword} onUploadProfilePhoto={onUploadProfilePhoto} onRemoveProfilePhoto={onRemoveProfilePhoto} />}
-    {showEmergencyContacts && createPortal(<div className="emergency-contacts-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) setShowEmergencyContacts(false)
+    }} onUpdateProfile={onUpdateProfile} onChangePassword={onChangePassword} onDeleteOwnAccount={onDeleteOwnAccount} onDeactivateOwnAccount={onDeactivateOwnAccount} onUploadProfilePhoto={onUploadProfilePhoto} onRemoveProfilePhoto={onRemoveProfilePhoto} />}
+    {showNotifications && createPortal(<div className={`notification-backdrop${isClosingNotifications ? ' is-closing' : ''}`} role="presentation" onAnimationEnd={(event) => {
+      if (event.target === event.currentTarget && event.animationName === 'notification-backdrop-out') finishNotificationsClose()
+    }} onMouseDown={(event) => {
+      if (event.target === event.currentTarget) closeNotifications()
     }}>
-      <section className="emergency-contacts-modal" role="dialog" aria-modal="true" aria-labelledby="emergency-contacts-title">
-        <header>
-          <div><span className="eyebrow">{language === 'tl' ? 'TULONG PARA SA BACO' : 'BACO EMERGENCY HELP'}</span><h2 id="emergency-contacts-title">{language === 'tl' ? 'Mga emergency contact sa Baco' : 'Baco emergency contacts'}</h2></div>
-          <button className="icon-button" type="button" aria-label={language === 'tl' ? 'Isara ang emergency contacts' : 'Close emergency contacts'} onClick={() => setShowEmergencyContacts(false)}><X size={19} /></button>
-        </header>
-        <p>{language === 'tl' ? 'Kung may emergency sa Baco, tawagan ang naaangkop na hotline o ang Munisipyo at ibigay ang barangay at eksaktong lokasyon.' : 'For emergencies in Baco, call the appropriate hotline or municipal office and provide your barangay and exact location.'}</p>
-        <a className="emergency-contact-link" href="tel:911"><span><strong>National Emergency Hotline</strong><small>{language === 'tl' ? 'Pulis, bumbero, at medikal na saklolo' : 'Police, fire, and medical emergencies'}</small></span><b>911</b></a>
-        <a className="emergency-contact-link" href="tel:+639660282662"><span><strong>{language === 'tl' ? 'Munisipyo ng Baco' : 'Baco Municipal Hall'}</strong><small>{language === 'tl' ? 'Makipag-ugnayan sa Munisipyo' : 'Contact the municipal office'}</small></span><b>+63 966 028 2662</b></a>
-        <a className="emergency-contact-link" href="tel:143"><span><strong>Philippine Red Cross</strong><small>{language === 'tl' ? 'Red Cross hotline' : 'Red Cross hotline'}</small></span><b>143</b></a>
-        <small className="emergency-contacts-note">{language === 'tl' ? 'Maaaring mag-iba ang availability depende sa lugar at network.' : 'Availability may vary by location and network.'}</small>
-      </section>
-    </div>, document.body)}
-    {showNotifications && createPortal(<div className="notification-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) setShowNotifications(false)
-    }}>
-      <section className="notification-panel" role="dialog" aria-modal="true" aria-labelledby="notification-panel-title">
+      <section className={`notification-panel${isClosingNotifications ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="notification-panel-title">
         <header className="notification-panel-header">
           <div><span className="eyebrow">{language === 'tl' ? 'MGA UPDATE SA KOMUNIDAD' : 'COMMUNITY UPDATES'}</span><h2 id="notification-panel-title">{language === 'tl' ? 'Mga abiso' : 'Notifications'}</h2></div>
           <div className="notification-panel-actions">
-            <button className="icon-button" type="button" aria-label={language === 'tl' ? 'Isara ang mga abiso' : 'Close notifications'} onClick={() => setShowNotifications(false)}><X size={19} /></button>
+            <button className="icon-button" type="button" aria-label={language === 'tl' ? 'Isara ang mga abiso' : 'Close notifications'} onClick={closeNotifications}><X size={19} /></button>
           </div>
         </header>
         {notificationError && <p className="notification-error" role="alert">{notificationError}</p>}
@@ -378,7 +382,7 @@ export default function Header({ role, user, language, onLanguageChange, onOpenL
       if (event.target === event.currentTarget && !isSigningOut) setShowSignoutConfirmation(false)
     }}>
       <section className="signout-modal" role="alertdialog" aria-modal="true" aria-labelledby="signout-title" aria-describedby="signout-description">
-        <span className="signout-modal-icon"><LogOut size={22} /></span>
+        <span className="signout-modal-icon signout-confirm-icon"><LogOut size={23} strokeWidth={2.5} /></span>
         <h2 id="signout-title">Sign out?</h2>
         <p id="signout-description">{language === 'tl' ? 'Sigurado ka bang gusto mong mag-sign out sa iyong account?' : 'Are you sure you want to sign out of your account?'}</p>
         {signoutError && <p className="signout-error" role="alert">{signoutError}</p>}

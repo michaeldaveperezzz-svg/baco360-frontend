@@ -31,6 +31,14 @@ declare global {
 
 let googleScriptPromise: Promise<void> | null = null
 
+function getErrorMessage(reason: unknown): string | null {
+  if (reason instanceof Error) return reason.message
+  if (reason && typeof reason === 'object' && 'message' in reason && typeof reason.message === 'string') {
+    return reason.message
+  }
+  return null
+}
+
 function loadGoogleIdentityScript(): Promise<void> {
   if (window.google?.accounts.id) return Promise.resolve()
   if (googleScriptPromise) return googleScriptPromise
@@ -87,7 +95,7 @@ export default function GoogleSignInButton({ intent, onCredential }: Props) {
             setIsLoading(true)
             void onCredentialRef.current(response.credential, intent)
               .catch((reason: unknown) => {
-                setError(reason instanceof Error ? reason.message : 'Google sign-in failed. Please try again.')
+                setError(getErrorMessage(reason) || 'Google sign-in failed. Please try again.')
               })
               .finally(() => setIsLoading(false))
           },
@@ -102,7 +110,7 @@ export default function GoogleSignInButton({ intent, onCredential }: Props) {
         })
       })
       .catch((reason: unknown) => {
-        if (active) setError(reason instanceof Error ? reason.message : 'Google sign-in could not be loaded.')
+        if (active) setError(getErrorMessage(reason) || 'Google sign-in could not be loaded.')
       })
 
     return () => { active = false }

@@ -30,6 +30,10 @@ export interface CommunityComment {
   created_at: string
 }
 
+export interface CommunityPost extends Omit<CommunityReport, 'hearted_by_me'> {
+  comments: CommunityComment[]
+}
+
 interface CommunityListResult {
   reports: CommunityReport[]
   pagination: { current_page: number; per_page: number; total: number; last_page: number }
@@ -41,6 +45,13 @@ interface CommunityCommentsResult {
 }
 
 export const communityReportsService = {
+  viewPost(reportId: number): Promise<ApiResponse<CommunityPost>> {
+    return apiRequest({
+      method: 'GET',
+      url: API_ENDPOINTS.COMMUNITY_REPORT_POST(reportId),
+    })
+  },
+
   async list(page = 1, perPage = 12): Promise<ApiResponse<CommunityListResult>> {
     const response = await apiRequest<CommunityListResult>({
       method: 'GET',

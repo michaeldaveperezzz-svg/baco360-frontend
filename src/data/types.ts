@@ -11,6 +11,7 @@ export interface User {
   is_active: boolean
   email_verified_at: string | null
   created_at: string
+  has_password?: boolean
   profile_photo?: string | null
   profile_photo_url?: string | null
   notification_settings: { sms_enabled: boolean; email_enabled: boolean; report_updates_enabled: boolean; resolution_updates_enabled: boolean }

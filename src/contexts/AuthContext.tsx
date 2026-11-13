@@ -10,11 +10,11 @@ interface AuthContextType {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: (email: string, password: string, remember?: boolean) => Promise<{ requires2FA: boolean }>
+  login: (email: string, password: string, remember?: boolean, reactivate?: boolean) => Promise<{ requires2FA: boolean }>
   verify2FA: (code: string, email: string) => Promise<void>
   authenticateWithTokens: (user: User, accessToken: string, refreshToken: string) => void
   register: (data: any) => Promise<{ requires2FA: boolean }>
-  logout: () => Promise<void>
+  logout: (revokeServerSession?: boolean) => Promise<void>
   updateUser: (user: User) => void
 }
 
@@ -107,12 +107,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   /**
    * Login user
    */
-  const login = async (email: string, password: string, remember = false) => {
+  const login = async (email: string, password: string, remember = false, reactivate = false) => {
   try {
     const response = await authService.login({
       email,
       password,
       remember,
+      reactivate,
     })
 
     const result = response.data as any
@@ -191,11 +192,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   /**
    * Logout user
    */
-  const logout = async () => {
+  const logout = async (revokeServerSession = true) => {
     try {
-      await authService.logout()
+      if (revokeServerSession) await authService.logout()
     } catch (error) {
-      console.error('Logout error:', error)
+      if (revokeServerSession) {
+        console.error('Logout error:', error)
+      }
     } finally {
       setAuthToken(null)
       setUser(null)

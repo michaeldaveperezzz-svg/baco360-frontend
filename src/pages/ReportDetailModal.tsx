@@ -1,12 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, CalendarDays, Check, Clock3, ImagePlus, MapPin, MessageSquare, Paperclip, Printer, Trash2, X } from 'lucide-react'
+import { AlertTriangle, CalendarDays, Check, Clock3, Heart, ImagePlus, MapPin, MessageSquare, Paperclip, Printer, Trash2, X } from 'lucide-react'
 import type { Category, Report, ReportStatus, User } from '../data/types'
 import { categoryName, statusLabel } from '../data/types'
 import type { UpdateReportData } from '../services/reports.service'
 import { reportsService } from '../services/reports.service'
 import { PriorityBadge, StatusBadge } from '../components/Common'
 import { formatPrintDateTime } from '../lib/printDateTime'
+import { communityReportsService, type CommunityPost } from '../services/communityReports.service'
 
 interface Props {
   report: Report
@@ -14,6 +15,7 @@ interface Props {
   isStaff?: boolean
   canAssign?: boolean
   canDelete?: boolean
+  canViewCommunityPost?: boolean
   staffUsers?: User[]
   onClose: () => void
   onAddComment?: (reportId: number, text: string, internal: boolean, photo?: File) => Promise<void>
@@ -32,6 +34,7 @@ export default function ReportDetailModal({
   isStaff = false,
   canAssign = false,
   canDelete = false,
+  canViewCommunityPost = false,
   staffUsers = [],
   onClose,
   onAddComment,
@@ -53,8 +56,15 @@ export default function ReportDetailModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [commentError, setCommentError] = useState<string | null>(null)
+  const [communityPost, setCommunityPost] = useState<CommunityPost | null>(null)
+  const [communityPostOpen, setCommunityPostOpen] = useState(false)
+  const [communityPostLoading, setCommunityPostLoading] = useState(false)
+  const [communityPostError, setCommunityPostError] = useState<string | null>(null)
   const [previewAttachment, setPreviewAttachment] = useState<{ url: string; name: string } | null>(null)
   const [isPrinting, setIsPrinting] = useState(false)
+  const [confirmingPrint, setConfirmingPrint] = useState(false)
+  const [includeConversation, setIncludeConversation] = useState(true)
+  const [includeCommunityPost, setIncludeCommunityPost] = useState(false)
   const [attachmentPreviews, setAttachmentPreviews] = useState<{
     reportId: number
     attachments: Report['attachments']
@@ -126,6 +136,15 @@ export default function ReportDetailModal({
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [previewAttachment])
 
+  useEffect(() => {
+    if (!communityPostOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCommunityPostOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [communityPostOpen])
+
   async function saveStaffFields(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const hasReportFieldChanges = selectedStatus !== report.status || selectedPriority !== report.priority
@@ -182,12 +201,50 @@ export default function ReportDetailModal({
     }
   }
 
+  async function loadCommunityPost(): Promise<CommunityPost | null> {
+    if (communityPost) return communityPost
+    if (communityPostLoading) return null
+    setCommunityPostLoading(true)
+    setCommunityPostError(null)
+    try {
+      const response = await communityReportsService.viewPost(report.id)
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Could not load the community post.')
+      }
+      setCommunityPost(response.data)
+      return response.data
+    } catch (loadError) {
+      setCommunityPostError(getErrorMessage(loadError))
+      return null
+    } finally {
+      setCommunityPostLoading(false)
+    }
+  }
+
+  async function toggleCommunityPost() {
+    if (communityPostOpen) {
+      setCommunityPostOpen(false)
+      return
+    }
+    setCommunityPostOpen(true)
+    if (!communityPost) await loadCommunityPost()
+  }
+
+  async function printReport() {
+    if (includeCommunityPost && !await loadCommunityPost()) return
+    setConfirmingPrint(false)
+    setIsPrinting(true)
+  }
+
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
     <section className="report-modal" role="dialog" aria-modal="true" aria-labelledby="report-detail-title">
       <div className="modal-head">
         <span className="eyebrow">REPORT DETAILS</span>
         <div>
-          <button className="icon-button" type="button" aria-label="Export or print report details" title={attachmentPreviewsReady ? 'Export or print report details' : 'Preparing report images'} onClick={() => setIsPrinting(true)} disabled={!attachmentPreviewsReady || isPrinting}><Printer size={15} /></button>
+          {canViewCommunityPost && report.status === 'resolved' && <button className="button button-quiet button-small report-community-post-header-button" type="button" onClick={() => void toggleCommunityPost()} disabled={communityPostLoading} aria-expanded={communityPostOpen} title="View community post">
+            <Heart size={14} />{communityPostLoading ? 'Loading…' : communityPostOpen ? 'Hide post' : 'View post'}
+          </button>}
+          <button className="icon-button" type="button" aria-label="Export or print report details" title={attachmentPreviewsReady ? 'Export or print report details' : 'Preparing report images'} onClick={() => { setIncludeConversation(true); setConfirmingPrint(true) }} disabled={!attachmentPreviewsReady || isPrinting}><Printer size={15} /></button>
           {canDelete && <button className="icon-button" type="button" aria-label="Delete report" onClick={() => setConfirmingDelete(true)}><Trash2 size={15} /></button>}
           <button className="icon-button" type="button" onClick={onClose} aria-label="Close report details"><X size={19} /></button>
         </div>
@@ -202,7 +259,6 @@ export default function ReportDetailModal({
         <span><CalendarDays size={14} />Reported {new Date(report.submitted_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
         <PriorityBadge priority={report.priority} status={report.status} />
       </div>
-
       {isStaff && <form id="staff-edit-form" className={`staff-edit-controls${canAssign ? ' staff-edit-controls--assignable' : ''}`} onSubmit={(event) => void saveStaffFields(event)}>
         <label>Status<select value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value as ReportStatus)} disabled={savingStaffFields}>{['submitted', 'under_review', 'assigned', 'in_progress', 'resolved', 'rejected', 'reopened'].map((status) => <option value={status} key={status}>{status.replaceAll('_', ' ')}</option>)}</select></label>
         <label>Priority<select value={selectedPriority} onChange={(event) => setSelectedPriority(event.target.value as Report['priority'])} disabled={savingStaffFields}>{['low', 'medium', 'high', 'urgent'].map((priority) => <option value={priority} key={priority}>{priority}</option>)}</select></label>
@@ -232,6 +288,48 @@ export default function ReportDetailModal({
       </div>
       </div>
     </section>
+    {communityPostOpen && createPortal(<div className="community-post-modal-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) setCommunityPostOpen(false)
+    }}>
+      <section className="community-post-modal" role="dialog" aria-modal="true" aria-labelledby="community-post-title">
+        <header className="community-post-modal-head">
+          <div><span className="eyebrow">COMMUNITY POST</span><h2 id="community-post-title">{communityPost?.title ?? 'Community post'}</h2></div>
+          <button className="icon-button" type="button" onClick={() => setCommunityPostOpen(false)} aria-label="Close community post"><X size={19} /></button>
+        </header>
+        <div className="community-post-modal-body">
+          {communityPostLoading ? <p role="status">Loading community post…</p>
+            : communityPostError ? <p className="form-error" role="alert">{communityPostError}</p>
+              : communityPost && <>
+                <p className="community-post-modal-description">{communityPost.description}</p>
+                {communityPost.resolution_description && <section className="community-post-modal-resolution"><strong>Resolution update</strong><p>{communityPost.resolution_description}</p></section>}
+                {communityPost.attachments.length > 0 && <section className="community-post-modal-attachments">
+                  <h3>Attachments</h3>
+                  <div className="attachment-grid">{communityPost.attachments.map((attachment) => <div className="attachment-card" key={attachment.id}>
+                    {attachmentUrls[attachment.id] && attachment.mime_type.startsWith('image/')
+                      ? <button className="attachment-image-button" type="button" onClick={() => setPreviewAttachment({ url: attachmentUrls[attachment.id], name: attachment.original_name })} aria-label={`Preview ${attachment.original_name}`}><img src={attachmentUrls[attachment.id]} alt={attachment.original_name} /></button>
+                      : attachmentUrls[attachment.id] && attachment.mime_type.startsWith('video/')
+                        ? <video className="attachment-video" src={attachmentUrls[attachment.id]} controls preload="metadata" aria-label={attachment.original_name} />
+                        : attachmentUrls[attachment.id]
+                          ? <a className="community-post-modal-file" href={attachmentUrls[attachment.id]} target="_blank" rel="noreferrer">{attachment.original_name}</a>
+                          : <p className="community-post-modal-attachment-status" role={attachmentErrors[attachment.id] ? 'alert' : 'status'}>{attachmentErrors[attachment.id] ? 'Attachment preview unavailable' : 'Loading attachment…'}</p>}
+                    <span><strong>{attachment.original_name}</strong><small>{attachment.attachment_type.replaceAll('_', ' ')}</small></span>
+                  </div>)}</div>
+                </section>}
+                <div className="community-post-modal-counts">
+                  <span><Heart size={17} />{communityPost.heart_count} {communityPost.heart_count === 1 ? 'heart' : 'hearts'}</span>
+                  <span><MessageSquare size={17} />{communityPost.comment_count} {communityPost.comment_count === 1 ? 'comment' : 'comments'}</span>
+                </div>
+                <section className="community-post-modal-comments">
+                  <h3>Resident comments</h3>
+                  {communityPost.comments.length === 0 ? <p>No community comments yet.</p> : communityPost.comments.map((item) => <article key={item.id}>
+                    <div><strong>{item.author}</strong><time>{new Date(item.created_at).toLocaleString()}</time></div>
+                    <p>{item.comment}</p>
+                  </article>)}
+                </section>
+              </>}
+        </div>
+      </section>
+    </div>, document.body)}
     {previewAttachment && createPortal(<div className="attachment-lightbox-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) setPreviewAttachment(null)
     }}>
@@ -247,8 +345,34 @@ export default function ReportDetailModal({
       {report.attachments.length > 0 && <section><h2>Attachments</h2><div className="report-print-images">{report.attachments.map((attachment) => <figure key={attachment.id}>{attachment.mime_type.startsWith('image/') && attachmentUrls[attachment.id] ? <img src={attachmentUrls[attachment.id]} alt={attachment.original_name} /> : <p>{attachment.mime_type.startsWith('video/') ? 'Video attachment: ' : 'Preview unavailable: '}{attachment.original_name}</p>}<figcaption>{attachment.original_name}</figcaption></figure>)}</div></section>}
       <section><h2>Status history</h2>{report.status_history.length ? <ul>{report.status_history.map((entry) => { const dateTime = formatPrintDateTime(entry.changed_at); return <li key={entry.id}><strong>{statusLabel[entry.new_status]}</strong><time className="print-datetime"><span>{dateTime.date}</span><small>{dateTime.time} · {entry.changed_by}</small></time>{entry.notes ? <p>{entry.notes}</p> : null}</li> })}</ul> : <p>No status history.</p>}</section>
       {report.assignments.length > 0 && <section><h2>Assignments</h2><ul>{report.assignments.map((assignment) => { const dateTime = formatPrintDateTime(assignment.assigned_at); return <li key={`${assignment.staff_id}-${assignment.assigned_at}`}><strong>{assignment.staff_name}</strong> · {assignment.department}<time className="print-datetime"><span>{dateTime.date}</span><small>{dateTime.time}</small></time>{assignment.assignment_notes ? <p>{assignment.assignment_notes}</p> : null}</li> })}</ul></section>}
-      <section><h2>Conversation</h2>{publicComments.length ? <ul>{publicComments.map((item) => { const dateTime = formatPrintDateTime(item.created_at); return <li key={item.id}><strong>{item.user_name}</strong><time className="print-datetime"><span>{dateTime.date}</span><small>{dateTime.time}</small></time><p>{item.comment}</p></li> })}</ul> : <p>No conversation updates.</p>}</section>
+      {includeConversation && <section><h2>Conversation</h2>{publicComments.length ? <ul>{publicComments.map((item) => { const dateTime = formatPrintDateTime(item.created_at); return <li key={item.id}><strong>{item.user_name}</strong><time className="print-datetime"><span>{dateTime.date}</span><small>{dateTime.time}</small></time><p>{item.comment}</p></li> })}</ul> : <p>No conversation updates.</p>}</section>}
+      {includeCommunityPost && communityPost && <section>
+        <h2>Community reactions and comments</h2>
+        <p><strong>{communityPost.title}</strong></p>
+        <p>Heart reactions: {communityPost.heart_count}</p>
+        <h3>Resident comments ({communityPost.comment_count})</h3>
+        {communityPost.comments.length ? <ul>{communityPost.comments.map((item) => {
+          const dateTime = formatPrintDateTime(item.created_at)
+          return <li key={item.id}><strong>{item.author}</strong><time className="print-datetime"><span>{dateTime.date}</span><small>{dateTime.time}</small></time><p>{item.comment}</p></li>
+        })}</ul> : <p>No community comments.</p>}
+      </section>}
     </main>, document.body)}
+    {confirmingPrint && createPortal(<div className="modal-backdrop report-print-options-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) setConfirmingPrint(false)
+    }}>
+      <section className="signout-modal report-print-options-modal" role="dialog" aria-modal="true" aria-labelledby="report-print-options-title" aria-describedby="report-print-options-description">
+        <span className="signout-modal-icon"><Printer size={22} /></span>
+        <h2 id="report-print-options-title">Print report details</h2>
+        <p id="report-print-options-description">Choose which conversations{canViewCommunityPost && report.status === 'resolved' ? ' and community activity' : ''} to include in the printed report.</p>
+        <label className="report-print-conversation-option"><input type="checkbox" checked={includeConversation} onChange={(event) => setIncludeConversation(event.target.checked)} /><span>Include conversation</span></label>
+        {canViewCommunityPost && report.status === 'resolved' && <label className="report-print-conversation-option"><input type="checkbox" checked={includeCommunityPost} onChange={(event) => setIncludeCommunityPost(event.target.checked)} /><span>Include community reactions and comments</span></label>}
+        {communityPostError && includeCommunityPost && <p className="signout-error" role="alert">{communityPostError}</p>}
+        <div className="signout-modal-actions">
+          <button type="button" className="button button-quiet" onClick={() => setConfirmingPrint(false)}>Cancel</button>
+          <button type="button" className="button button-primary" onClick={() => void printReport()} disabled={communityPostLoading}>{communityPostLoading ? 'Loading community post…' : 'Print report'}</button>
+        </div>
+      </section>
+    </div>, document.body)}
     {confirmingDelete && createPortal(<div className="modal-backdrop delete-confirm-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget && !deleting) setConfirmingDelete(false)
     }}>

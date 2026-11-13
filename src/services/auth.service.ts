@@ -9,6 +9,7 @@ export interface LoginCredentials {
   email: string
   password: string
   remember?: boolean
+  reactivate?: boolean
 }
 
 /**
@@ -70,7 +71,7 @@ export const authService = {
     })
   },
 
-  async googleSignIn(idToken: string, intent: 'sign_in' | 'sign_up'): Promise<ApiResponse<{
+  async googleSignIn(idToken: string, intent: 'sign_in' | 'sign_up' | 'reactivate'): Promise<ApiResponse<{
     user: User
     tokens: { access_token: string; refresh_token: string }
   }>> {
@@ -99,6 +100,7 @@ export const authService = {
     return apiRequest({
       method: 'POST',
       url: API_ENDPOINTS.LOGOUT,
+      data: { refresh_token: localStorage.getItem('refresh_token') },
     })
   },
 

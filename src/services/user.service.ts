@@ -14,6 +14,7 @@ export interface UpdateProfileData {
 export interface ContactChangeRequest {
   email_verification_required: boolean
   phone_verification_required: boolean
+  user: User
 }
 
 export interface CreateUserData {
@@ -37,6 +38,31 @@ export interface ChangePasswordData {
   current_password: string
   password: string
   password_confirmation: string
+}
+
+export interface LoginHistoryEntry {
+  id: number
+  description: string
+  ip_address: string | null
+  user_agent: string | null
+  created_at: string
+}
+
+export interface LoginHistoryResponse {
+  logs: LoginHistoryEntry[]
+}
+
+export interface ActiveSession {
+  session_id: string
+  created_at: string | null
+  expires_at: string
+  ip_address: string | null
+  user_agent: string | null
+  is_current: boolean
+}
+
+export interface ActiveSessionsResponse {
+  sessions: ActiveSession[]
 }
 
 export interface UpdateResidentProfileData {
@@ -207,6 +233,45 @@ export const userService = {
       method: 'PUT',
       url: API_ENDPOINTS.CHANGE_PASSWORD,
       data,
+    })
+  },
+
+  async getLoginHistory(): Promise<ApiResponse<LoginHistoryResponse>> {
+    return apiRequest<LoginHistoryResponse>({
+      method: 'GET',
+      url: API_ENDPOINTS.LOGIN_HISTORY,
+    })
+  },
+
+  async getActiveSessions(): Promise<ApiResponse<ActiveSessionsResponse>> {
+    const refreshToken = localStorage.getItem('refresh_token')
+    return apiRequest<ActiveSessionsResponse>({
+      method: 'GET',
+      url: API_ENDPOINTS.ACTIVE_SESSIONS,
+      headers: refreshToken ? { 'X-Refresh-Token': refreshToken } : undefined,
+    })
+  },
+
+  async revokeActiveSession(sessionId: string): Promise<ApiResponse> {
+    return apiRequest({
+      method: 'DELETE',
+      url: API_ENDPOINTS.REVOKE_SESSION(sessionId),
+    })
+  },
+
+  async deleteOwnAccount(password: string): Promise<ApiResponse> {
+    return apiRequest({
+      method: 'DELETE',
+      url: API_ENDPOINTS.DELETE_ACCOUNT,
+      data: { password },
+    })
+  },
+
+  async deactivateOwnAccount(reason: string, reasonDetails: string): Promise<ApiResponse> {
+    return apiRequest({
+      method: 'POST',
+      url: API_ENDPOINTS.DEACTIVATE_ACCOUNT,
+      data: { reason, reason_details: reasonDetails },
     })
   },
 

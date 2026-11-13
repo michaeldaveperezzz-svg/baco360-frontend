@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Camera, Check, Clock3, ImagePlus, Mail, MapPin, Trash2, UserRound, X } from 'lucide-react'
+import { Camera, Check, Clock3, ImagePlus, MapPin, Trash2, UserRound, X } from 'lucide-react'
 import ProfilePhoto from '../components/ProfilePhoto'
 import SuccessModal from '../components/SuccessModal'
 import type { ResidentProfile, User } from '../data/types'
@@ -60,11 +60,8 @@ export default function ResidentProfilePage({ user, onCancel }: ResidentProfileP
   const [profile, setProfile] = useState<ResidentProfile | null>(null)
   const [form, setForm] = useState<ProfileForm>(EMPTY_FORM)
   const [accountDetails, setAccountDetails] = useState({ name: user.name, email: user.email, phone: user.phone ?? '' })
-  const [contactVerification, setContactVerification] = useState<{ email_verification_required: boolean; phone_verification_required: boolean } | null>(null)
-  const [pendingContactChange, setPendingContactChange] = useState<{ email: string; phone: string } | null>(null)
-  const [verificationCodes, setVerificationCodes] = useState({ account: '', email: '' })
-  const [emailVerificationOpen, setEmailVerificationOpen] = useState(false)
-  const [isRequestingVerification, setIsRequestingVerification] = useState(false)
+  const [contactVerification, setContactVerification] = useState<{ phone_verification_required: boolean } | null>(null)
+  const [verificationCode, setVerificationCode] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
@@ -76,16 +73,11 @@ export default function ResidentProfilePage({ user, onCancel }: ResidentProfileP
   const photoInput = useRef<HTMLInputElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const onCancelRef = useRef(onCancel)
-  const emailVerificationOpenRef = useRef(false)
   const dismissSuccess = useCallback(() => setSuccessMessage(''), [])
 
   useEffect(() => {
     onCancelRef.current = onCancel
   }, [onCancel])
-
-  useEffect(() => {
-    emailVerificationOpenRef.current = emailVerificationOpen
-  }, [emailVerificationOpen])
 
   useEffect(() => {
     if (!previewUrl) return
@@ -96,9 +88,6 @@ export default function ResidentProfilePage({ user, onCancel }: ResidentProfileP
     const previousOverflow = document.body.style.overflow
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      if (emailVerificationOpenRef.current) {
-        return
-      }
       onCancelRef.current()
     }
     document.body.style.overflow = 'hidden'
@@ -183,28 +172,44 @@ export default function ResidentProfilePage({ user, onCancel }: ResidentProfileP
       }
 
       if (emailChanged || phoneChanged) {
-        if (emailChanged) {
-          const contactChange = { email: accountDetails.email.trim(), phone: phoneValue }
-          setPendingContactChange(contactChange)
-          setEmailVerificationOpen(true)
-          setIsRequestingVerification(true)
-          try {
-            await sendContactVerification(contactChange)
-          } finally {
-            setIsRequestingVerification(false)
-          }
-        } else {
-          const requestResponse = await userService.requestContactChange({
-            email: accountDetails.email.trim(),
-            phone: phoneValue,
-          })
-          if (!requestResponse.success || !requestResponse.data) {
-            throw new Error(requestResponse.message || 'Unable to send contact verification codes.')
-          }
-          setContactVerification(requestResponse.data)
-          setVerificationCodes({ account: '', email: '' })
-          setNotice('A verification code was sent to your current email. Enter it to confirm your phone change.')
+        const requestResponse = await userService.requestContactChange({
+          email: accountDetails.email.trim(),
+          phone: phoneValue,
+        })
+        if (!requestResponse.success || !requestResponse.data) {
+          throw new Error(requestResponse.message || 'Unable to save your contact changes.')
         }
+        const updatedUser = requestResponse.data.user
+        updateUser(updatedUser)
+        setProfile((current) => current ? {
+          ...current,
+          name: updatedUser.name,
+          email: updatedUser.email,
+          phone: updatedUser.phone,
+        } : current)
+        if (requestResponse.data.phone_verification_required) {
+          setAccountDetails((current) => ({
+            ...current,
+            name: updatedUser.name,
+            email: updatedUser.email,
+          }))
+          setContactVerification({ phone_verification_required: true })
+          setVerificationCode('')
+          setNotice(emailChanged
+            ? 'Your email was updated. A phone verification code was sent to your previous email address.'
+            : 'A verification code was sent to your current email. Enter it to confirm your phone change.')
+          return
+        }
+        setAccountDetails({
+          name: updatedUser.name,
+          email: updatedUser.email,
+          phone: updatedUser.phone ?? '',
+        })
+        setSuccessMessage(emailChanged
+          ? 'Your email and resident profile have been saved.'
+          : photoWasSelected
+            ? 'Your resident profile and photo have been saved.'
+            : 'Your resident profile has been saved.')
         return
       }
 
@@ -218,37 +223,13 @@ export default function ResidentProfilePage({ user, onCancel }: ResidentProfileP
     }
   }
 
-  async function sendContactVerification(contactChange: { email: string; phone: string }) {
-    const requestResponse = await userService.requestContactChange(contactChange)
-    if (!requestResponse.success || !requestResponse.data?.email_verification_required) {
-      throw new Error(requestResponse.message || 'Email verification could not be started.')
-    }
-    setContactVerification(requestResponse.data)
-    setVerificationCodes({ account: '', email: '' })
-    setError('')
-  }
-  
-  async function retryEmailVerification() {
-    if (!pendingContactChange || isRequestingVerification) return
-    setIsRequestingVerification(true)
-    setError('')
-    try {
-      await sendContactVerification(pendingContactChange)
-    } catch (reason) {
-      setError(getErrorMessage(reason, 'Unable to send the verification code.'))
-    } finally {
-      setIsRequestingVerification(false)
-    }
-  }
-
   async function verifyPendingContact() {
     if (!contactVerification) return
     setIsSaving(true)
     setError('')
     try {
       const verificationResponse = await userService.verifyContactChange({
-        ...(contactVerification.phone_verification_required ? { account_code: verificationCodes.account } : {}),
-        ...(contactVerification.email_verification_required ? { email_code: verificationCodes.email } : {}),
+        account_code: verificationCode,
       })
       if (!verificationResponse.success || !verificationResponse.data) {
         throw new Error(verificationResponse.message || 'Unable to verify your contact changes.')
@@ -266,15 +247,9 @@ export default function ResidentProfilePage({ user, onCancel }: ResidentProfileP
         phone: verificationResponse.data.phone ?? '',
       })
       setContactVerification(null)
-      setPendingContactChange(null)
-      setVerificationCodes({ account: '', email: '' })
-      setEmailVerificationOpen(false)
+      setVerificationCode('')
       setNotice('')
-      setSuccessMessage(contactVerification.email_verification_required
-        ? contactVerification.phone_verification_required
-          ? 'Your email and phone number have been verified and updated.'
-          : 'Your email has been verified and updated.'
-        : 'Your phone number has been verified and updated.')
+      setSuccessMessage('Your phone number has been verified and updated.')
     } catch (reason) {
       setError(getErrorMessage(reason, 'Unable to verify your contact changes.'))
     } finally {
@@ -284,9 +259,7 @@ export default function ResidentProfilePage({ user, onCancel }: ResidentProfileP
 
   function cancelContactVerification() {
     setContactVerification(null)
-    setPendingContactChange(null)
-    setVerificationCodes({ account: '', email: '' })
-    setEmailVerificationOpen(false)
+    setVerificationCode('')
     setAccountDetails((current) => ({
       ...current,
       email: profile?.email ?? '',
@@ -388,9 +361,9 @@ export default function ResidentProfilePage({ user, onCancel }: ResidentProfileP
               <option value="Other">Other</option>
             </select>
           </label>
-          {contactVerification?.phone_verification_required && !contactVerification.email_verification_required && <label>Phone change verification code (sent to your current email)<input autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={verificationCodes.account} onChange={(event) => setVerificationCodes((current) => ({ ...current, account: event.target.value.replace(/\D/g, '') }))} required /></label>}
+          {contactVerification?.phone_verification_required && <label>Phone change verification code (sent to your current email)<input autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, ''))} required /></label>}
         </div>
-        {contactVerification?.phone_verification_required && !contactVerification.email_verification_required && <p className="resident-contact-verification-note" role="status">Enter the code sent to your current email to confirm your phone change.</p>}
+        {contactVerification?.phone_verification_required && <p className="resident-contact-verification-note" role="status">Enter the code sent to your current email to confirm your phone change.</p>}
       </section>
 
       <section className="content-panel resident-profile-section">
@@ -435,35 +408,14 @@ export default function ResidentProfilePage({ user, onCancel }: ResidentProfileP
       </section>
 
           <div className="resident-profile-form-actions">
-            {contactVerification?.phone_verification_required && !contactVerification.email_verification_required
+            {contactVerification?.phone_verification_required
               ? <button type="button" className="button button-quiet" onClick={cancelContactVerification}>Cancel verification</button>
               : <button type="button" className="button button-quiet" onClick={onCancel}>Cancel</button>}
-            <button type="submit" className="button button-primary" disabled={isSaving}>{isSaving ? (contactVerification ? 'Verifying…' : 'Saving…') : contactVerification?.phone_verification_required && !contactVerification.email_verification_required ? 'Verify phone change' : 'Save changes'}</button>
+            <button type="submit" className="button button-primary" disabled={isSaving}>{isSaving ? (contactVerification ? 'Verifying…' : 'Saving…') : contactVerification?.phone_verification_required ? 'Verify phone change' : 'Save changes'}</button>
           </div>
         </form>}
       </div>
     </section>
-    {emailVerificationOpen && <div className="email-change-verification-backdrop" role="presentation">
-      <section className="email-change-verification-modal" role="dialog" aria-modal="true" aria-labelledby="email-change-verification-title">
-        <header className="email-change-verification-header">
-          <span><Mail size={20} /></span>
-          <button type="button" className="icon-button" aria-label="Cancel email verification" onClick={cancelContactVerification}><X size={19} /></button>
-        </header>
-        <h2 id="email-change-verification-title">Confirm your new email</h2>
-        <p>You changed your email to <strong>{pendingContactChange?.email ?? accountDetails.email}</strong>. {contactVerification?.email_verification_required ? 'We sent a verification code to this address. Enter it below to verify your new email.' : isRequestingVerification ? 'We are sending a verification code to this address. Enter the code here when it arrives.' : 'Enter the verification code sent to this address. You can resend it if it does not arrive.'}</p>
-        {contactVerification?.phone_verification_required && <p className="email-change-phone-note">A separate code was also sent to your current email to confirm your phone change.</p>}
-        {error && <p className="resident-profile-message is-error" role="alert">{error}</p>}
-        <form onSubmit={(event) => { event.preventDefault(); void verifyPendingContact() }}>
-          {contactVerification?.phone_verification_required && <label>Phone change code (sent to your current email)<input autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={verificationCodes.account} onChange={(event) => setVerificationCodes((current) => ({ ...current, account: event.target.value.replace(/\D/g, '') }))} required /></label>}
-          <label>Email verification code<input autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={verificationCodes.email} onChange={(event) => setVerificationCodes((current) => ({ ...current, email: event.target.value.replace(/\D/g, '') }))} required autoFocus /></label>
-          <div className="email-change-verification-actions">
-            <button type="button" className="button button-quiet" onClick={cancelContactVerification} disabled={isSaving || isRequestingVerification}>Cancel</button>
-            <button type="submit" className="button button-primary" disabled={isSaving || isRequestingVerification || !contactVerification?.email_verification_required}>{isSaving ? 'Verifying…' : isRequestingVerification ? 'Sending code…' : 'Verify email'}</button>
-            {(!contactVerification?.email_verification_required || error) && <button type="button" className="button button-quiet" onClick={() => void retryEmailVerification()} disabled={isRequestingVerification}>{isRequestingVerification ? 'Sending…' : 'Resend code'}</button>}
-          </div>
-        </form>
-      </section>
-    </div>}
     {successMessage && <SuccessModal message={successMessage} onClose={dismissSuccess} />}
   </div>, document.body)
 }

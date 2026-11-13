@@ -1,20 +1,35 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Accessibility, Bell, Camera, ChevronDown, ChevronLeft, CircleHelp, Globe2, ImagePlus, LogOut, Moon, Palette, PanelsTopLeft, Shield, Sun, Trash2, UserRound, X } from 'lucide-react'
+import { Accessibility, Camera, ChevronDown, ChevronLeft, CircleHelp, Globe2, ImagePlus, LogOut, Moon, Palette, PanelsTopLeft, Shield, Sun, Trash2, UserRound, X } from 'lucide-react'
 import type { Language } from '../i18n'
 import type { User } from '../data/types'
-import type { UpdateProfileData } from '../services/user.service'
+import { userService, type ActiveSession, type LoginHistoryEntry, type UpdateProfileData } from '../services/user.service'
 import ProfilePhoto from './ProfilePhoto'
 
-type SettingsPage = 'home' | 'profile' | 'password' | 'notifications' | 'language' | 'accessibility' | 'theme' | 'security' | 'sessions' | 'history' | 'help' | 'about'
+type SettingsPage = 'home' | 'profile' | 'password' | 'language' | 'accessibility' | 'theme' | 'security' | 'sessions' | 'history' | 'help' | 'about'
+type AccountAction = 'choose' | 'delete' | 'deactivate' | 'confirm-deactivation'
+
+const deactivationReasons = [
+  ['no_longer_needed', 'I no longer need this account', 'Hindi ko na kailangan ang account na ito'],
+  ['taking_a_break', 'I am taking a break', 'Magpapahinga muna ako sa paggamit nito'],
+  ['privacy_concerns', 'Privacy concerns', 'May alalahanin ako tungkol sa privacy'],
+  ['too_many_notifications', 'Too many notifications', 'Masyadong maraming notification'],
+  ['difficulty_using_app', 'Difficulty using Baco360', 'Nahihirapan akong gamitin ang Baco360'],
+  ['other', 'Other reason', 'Iba pang dahilan'],
+] as const
+
 interface AccountMenuProps {
   user: User
   language: Language
+  isClosing: boolean
+  onCloseComplete: () => void
   onLanguageChange: (language: Language) => void
   onClose: () => void
   onSignOut: () => void
   onUpdateProfile: (data: UpdateProfileData) => Promise<void>
   onChangePassword: (currentPassword: string, password: string, confirmation: string) => Promise<void>
+  onDeleteOwnAccount: (password: string) => Promise<void>
+  onDeactivateOwnAccount: (reason: string, reasonDetails: string) => Promise<void>
   onNavigateWebsiteContent: () => void
   onNavigateResidentProfile: () => void
   onUploadProfilePhoto: (file: File) => Promise<void>
@@ -28,16 +43,39 @@ function getErrorMessage(reason: unknown, fallback: string) {
   return fallback
 }
 
-export default function AccountMenu({ user, language, onLanguageChange, onClose, onSignOut, onUpdateProfile, onChangePassword, onNavigateWebsiteContent, onNavigateResidentProfile, onUploadProfilePhoto, onRemoveProfilePhoto }: AccountMenuProps) {
+function formatLoginDate(value: string, language: Language) {
+  const date = new Date(value.replace(' ', 'T'))
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString(language === 'tl' ? 'fil-PH' : 'en-PH', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
+export default function AccountMenu({ user, language, isClosing, onCloseComplete, onLanguageChange, onClose, onSignOut, onUpdateProfile, onChangePassword, onDeleteOwnAccount, onDeactivateOwnAccount, onNavigateWebsiteContent, onNavigateResidentProfile, onUploadProfilePhoto, onRemoveProfilePhoto }: AccountMenuProps) {
   const [page, setPage] = useState<SettingsPage>('home')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [profile, setProfile] = useState({ name: user.name, email: user.email, phone: user.phone ?? '' })
   const [currentPassword, setCurrentPassword] = useState('')
+  const [hasPassword, setHasPassword] = useState(user.has_password ?? true)
   const [newPassword, setNewPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
+  const [accountAction, setAccountAction] = useState<AccountAction | null>(null)
+  const [deletionPassword, setDeletionPassword] = useState('')
+  const [deactivationReason, setDeactivationReason] = useState('')
+  const [deactivationDetails, setDeactivationDetails] = useState('')
+  const [accountActionError, setAccountActionError] = useState('')
+  const [accountActionBusy, setAccountActionBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [loginHistory, setLoginHistory] = useState<LoginHistoryEntry[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState('')
+  const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([])
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [sessionsError, setSessionsError] = useState('')
+  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null)
   const [photoBusy, setPhotoBusy] = useState(false)
   const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
@@ -81,7 +119,10 @@ export default function AccountMenu({ user, language, onLanguageChange, onClose,
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') {
+        if (accountAction && !accountActionBusy) setAccountAction(null)
+        else onClose()
+      }
     }
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -90,12 +131,66 @@ export default function AccountMenu({ user, language, onLanguageChange, onClose,
       document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [onClose])
+  }, [accountAction, accountActionBusy, onClose])
 
   function navigate(next: SettingsPage) {
     setPage(next)
     setError('')
     setNotice('')
+    if (next === 'history') void loadLoginHistory()
+    if (next === 'sessions') void loadActiveSessions()
+  }
+
+  async function loadActiveSessions() {
+    setSessionsLoading(true)
+    setSessionsError('')
+    try {
+      const response = await userService.getActiveSessions()
+      if (!response.success || !response.data) {
+        throw new Error(response.message || text('Unable to load active sessions.', 'Hindi ma-load ang mga aktibong session.'))
+      }
+      setActiveSessions(response.data.sessions)
+    } catch (reason) {
+      setSessionsError(getErrorMessage(reason, text('Unable to load active sessions.', 'Hindi ma-load ang mga aktibong session.')))
+    } finally {
+      setSessionsLoading(false)
+    }
+  }
+
+  async function revokeActiveSession(session: ActiveSession) {
+    setRevokingSessionId(session.session_id)
+    setSessionsError('')
+    try {
+      if (session.is_current) {
+        onSignOut()
+        return
+      }
+      const response = await userService.revokeActiveSession(session.session_id)
+      if (!response.success) {
+        throw new Error(response.message || text('Unable to end this session.', 'Hindi maisara ang session na ito.'))
+      }
+      await loadActiveSessions()
+    } catch (reason) {
+      setSessionsError(getErrorMessage(reason, text('Unable to end this session.', 'Hindi maisara ang session na ito.')))
+    } finally {
+      setRevokingSessionId(null)
+    }
+  }
+
+  async function loadLoginHistory() {
+    setHistoryLoading(true)
+    setHistoryError('')
+    try {
+      const response = await userService.getLoginHistory()
+      if (!response.success || !response.data) {
+        throw new Error(response.message || text('Unable to load login history.', 'Hindi ma-load ang kasaysayan ng pag-login.'))
+      }
+      setLoginHistory(response.data.logs)
+    } catch (reason) {
+      setHistoryError(getErrorMessage(reason, text('Unable to load login history.', 'Hindi ma-load ang kasaysayan ng pag-login.')))
+    } finally {
+      setHistoryLoading(false)
+    }
   }
 
   async function submitProfile(event: FormEvent<HTMLFormElement>) {
@@ -122,10 +217,54 @@ export default function AccountMenu({ user, language, onLanguageChange, onClose,
     try {
       await onChangePassword(currentPassword, newPassword, passwordConfirmation)
       setCurrentPassword(''); setNewPassword(''); setPasswordConfirmation('')
+      setHasPassword(true)
       setNotice(text('Password changed successfully.', 'Matagumpay na napalitan ang password.'))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : text('Unable to change password.', 'Hindi mapalitan ang password.'))
     } finally { setBusy(false) }
+  }
+
+  function openAccountActions() {
+    setDeletionPassword('')
+    setDeactivationReason('')
+    setDeactivationDetails('')
+    setAccountActionError('')
+    setAccountAction('choose')
+  }
+
+  async function submitAccountDeletion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setAccountActionBusy(true)
+    setAccountActionError('')
+    try {
+      await onDeleteOwnAccount(deletionPassword)
+    } catch (reason) {
+      setAccountActionError(getErrorMessage(reason, text('Unable to delete your account.', 'Hindi ma-delete ang iyong account.')))
+    } finally {
+      setAccountActionBusy(false)
+    }
+  }
+
+  function continueDeactivation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!deactivationReason || (deactivationReason === 'other' && !deactivationDetails.trim())) {
+      setAccountActionError(text('Choose a reason and provide details if you select Other.', 'Pumili ng dahilan at magbigay ng detalye kung Iba pa ang pinili.'))
+      return
+    }
+    setAccountActionError('')
+    setAccountAction('confirm-deactivation')
+  }
+
+  async function confirmDeactivation() {
+    setAccountActionBusy(true)
+    setAccountActionError('')
+    try {
+      await onDeactivateOwnAccount(deactivationReason, deactivationDetails.trim())
+    } catch (reason) {
+      setAccountActionError(getErrorMessage(reason, text('Unable to deactivate your account.', 'Hindi ma-deactivate ang iyong account.')))
+    } finally {
+      setAccountActionBusy(false)
+    }
   }
 
   function selectPhoto(event: ChangeEvent<HTMLInputElement>) {
@@ -196,7 +335,7 @@ export default function AccountMenu({ user, language, onLanguageChange, onClose,
 
   const pageTitles: Record<SettingsPage, string> = {
     home: text('Account & settings', 'Account at mga setting'), profile: text('My Profile', 'Aking Profile'),
-    password: text('Change Password', 'Palitan ang Password'), notifications: text('In-app Notifications', 'Mga Abiso sa App'),
+    password: text('Change Password', 'Palitan ang Password'),
     language: text('Language and Region', 'Wika at Rehiyon'), accessibility: text('Accessibility', 'Accessibility'),
     theme: text('Theme and Appearance', 'Tema at Itsura'), security: text('Security Settings', 'Mga Setting ng Seguridad'),
     sessions: text('Active Sessions', 'Mga Aktibong Session'), history: text('Login History', 'Kasaysayan ng Pag-login'),
@@ -211,11 +350,10 @@ export default function AccountMenu({ user, language, onLanguageChange, onClose,
         ? <button className="account-menu-row" type="button" onClick={onNavigateResidentProfile}><span className="account-menu-row-icon"><UserRound size={18} /></span><span>{text('My Profile', 'Aking Profile')}</span><ChevronLeft className="account-menu-row-arrow" size={16} /></button>
         : row(<UserRound size={18} />, text('My Profile', 'Aking Profile'), 'profile')}
       {row(<Accessibility size={18} />, text('Accessibility', 'Accessibility'), 'accessibility')}
-      {row(<Bell size={18} />, text('In-app Notifications', 'Mga Abiso sa App'), 'notifications')}
       {row(<Globe2 size={18} />, text('Language and Region', 'Wika at Rehiyon'), 'language')}
       <div className="account-menu-section-label">{text('PREFERENCES & SUPPORT', 'PREFERENCE AT SUPORTA')}</div>
       {accordion('appearance', <Palette size={18} />, text('Appearance', 'Itsura'), [[text('Theme and Appearance', 'Tema at Itsura'), 'theme']], navigate)}
-      {accordion('security', <Shield size={18} />, text('Security and Privacy', 'Seguridad at Privacy'), [[text('Security Settings', 'Mga Setting ng Seguridad'), 'security'], [text('Change Password', 'Palitan ang Password'), 'password'], [text('Active Sessions', 'Mga Aktibong Session'), 'sessions'], [text('Login History', 'Kasaysayan ng Pag-login'), 'history']], navigate)}
+      {accordion('security', <Shield size={18} />, text('Security and Privacy', 'Seguridad at Privacy'), [[text('Security Settings', 'Mga Setting ng Seguridad'), 'security'], [text('Active Sessions', 'Mga Aktibong Session'), 'sessions'], [text('Login History', 'Kasaysayan ng Pag-login'), 'history']], navigate)}
       {user.role === 'admin' && <button className="account-menu-row" type="button" onClick={onNavigateWebsiteContent}>
         <span className="account-menu-row-icon"><PanelsTopLeft size={18} /></span><span>{text('Website Settings', 'Mga Setting ng Website')}</span><ChevronLeft className="account-menu-row-arrow" size={16} />
       </button>}
@@ -236,12 +374,13 @@ export default function AccountMenu({ user, language, onLanguageChange, onClose,
       <button className="account-primary-button" type="submit" disabled={busy}>{busy ? text('Saving…', 'Sine-save…') : text('Save changes', 'I-save ang mga pagbabago')}</button>
     </form>
     if (page === 'password') return <form className="account-settings-form" onSubmit={(event) => void submitPassword(event)}>
-      <label>{text('Current password', 'Kasalukuyang password')}<input required type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
+      {hasPassword
+        ? <label>{text('Current password', 'Kasalukuyang password')}<input required type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
+        : <p>{text('You signed in with Google and have not set a password yet. Enter a new password below.', 'Gumamit ka ng Google sa pag-sign in at wala ka pang password. Maglagay ng bagong password sa ibaba.')}</p>}
       <label>{text('New password (at least 8 characters)', 'Bagong password (hindi bababa sa 8 karakter)')}<input required minLength={8} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>
       <label>{text('Confirm new password', 'Kumpirmahin ang bagong password')}<input required minLength={8} type="password" autoComplete="new-password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} /></label>
       <button className="account-primary-button" type="submit" disabled={busy}>{busy ? text('Updating…', 'Ina-update…') : text('Update password', 'I-update ang password')}</button>
     </form>
-    if (page === 'notifications') return <div className="account-info-card"><Bell size={22} /><strong>{text('In-app notifications', 'Mga abiso sa app')}</strong><p>{text('Report updates, assignments, address verification, and announcements appear in your notification center.', 'Lalabas sa notification center ang mga update sa report, pagtatalaga, beripikasyon ng address, at mga anunsyo.')}</p></div>
     if (page === 'language') return <div className="account-settings-form">
       <label>{text('Language', 'Wika')}<select value={language} onChange={(event) => onLanguageChange(event.target.value as Language)}><option value="en">English</option><option value="tl">Filipino</option></select></label>
       <label>{text('Region', 'Rehiyon')}<input readOnly value="Baco, Oriental Mindoro · Philippines (UTC+8)" /></label>
@@ -253,20 +392,120 @@ export default function AccountMenu({ user, language, onLanguageChange, onClose,
     if (page === 'theme') return <div className="account-theme-options">
       {(['light', 'dark', 'system'] as const).map((value) => <button key={value} type="button" className={theme === value ? 'selected' : ''} onClick={() => updateTheme(value)}>{value === 'light' ? <Sun size={18} /> : value === 'dark' ? <Moon size={18} /> : <Palette size={18} />}{text(value[0].toUpperCase() + value.slice(1), value === 'light' ? 'Maliwanag' : value === 'dark' ? 'Madilim' : 'Ayon sa device')}</button>)}
     </div>
-    if (page === 'security') return <div className="account-info-card"><Shield size={22} /><strong>{text('Keep your account secure', 'Panatilihing ligtas ang iyong account')}</strong><p>{text('Use a unique password and never share your sign-in details. Change your password regularly.', 'Gumamit ng natatanging password at huwag ibahagi ang iyong mga detalye sa pag-login. Palitan ito nang regular.')}</p><button type="button" onClick={() => navigate('password')}>{text('Change password', 'Palitan ang password')}</button></div>
-    if (page === 'sessions' || page === 'history') return <div className="account-info-card"><Shield size={22} /><strong>{page === 'sessions' ? text('Session management is not available yet.', 'Hindi pa available ang pamamahala ng session.') : text('Login history is not available yet.', 'Hindi pa available ang kasaysayan ng pag-login.')}</strong><p>{text('This app does not currently store session or login-history records.', 'Hindi pa nagtatala ang app na ito ng session o kasaysayan ng pag-login.')}</p></div>
+    if (page === 'security') return <>
+      <div className="account-info-card"><Shield size={22} /><strong>{text('Keep your account secure', 'Panatilihing ligtas ang iyong account')}</strong><p>{text('Use a unique password and never share your sign-in details. Change your password regularly.', 'Gumamit ng natatanging password at huwag ibahagi ang iyong mga detalye sa pag-login. Palitan ito nang regular.')}</p><button type="button" onClick={() => navigate('password')}>{text('Change password', 'Palitan ang password')}</button></div>
+      {user.role === 'resident' && <div className="account-danger-card">
+        <strong>{text('Manage your account', 'Pamahalaan ang account')}</strong>
+        <p>{text('Deactivate your account temporarily or request permanent deletion.', 'Pansamantalang i-deactivate o hilinging permanenteng burahin ang iyong account.')}</p>
+        <button type="button" onClick={openAccountActions}>{text('Deactivate or delete account', 'I-deactivate o burahin ang account')}</button>
+      </div>}
+    </>
+    if (page === 'sessions') {
+      if (sessionsLoading) return <p className="account-menu-message" role="status">{text('Loading active sessions…', 'Nilo-load ang mga aktibong session…')}</p>
+      if (sessionsError && activeSessions.length === 0) return <div className="account-info-card"><Shield size={22} /><strong>{text('Could not load active sessions', 'Hindi ma-load ang mga aktibong session')}</strong><p role="alert">{sessionsError}</p><button type="button" onClick={() => void loadActiveSessions()}>{text('Try again', 'Subukan muli')}</button></div>
+      if (activeSessions.length === 0) return <div className="account-info-card"><Shield size={22} /><strong>{text('No active sessions found', 'Walang nahanap na aktibong session')}</strong><p>{text('Sign in again to create an active session for this device.', 'Mag-sign in muli upang gumawa ng aktibong session para sa device na ito.')}</p></div>
+      return <section className="account-active-sessions">
+        <div className="account-login-history-toolbar"><p>{text('Revoke any session you do not recognize.', 'I-revoke ang session na hindi mo nakikilala.')}</p><button type="button" onClick={() => void loadActiveSessions()} disabled={revokingSessionId !== null}>{text('Refresh', 'I-refresh')}</button></div>
+        {sessionsError && <p className="account-menu-message is-error" role="alert">{sessionsError}</p>}
+        {activeSessions.map((session) => <article className="account-active-session-item" key={session.session_id}>
+          <div className="account-login-history-heading">
+            <strong>{session.is_current ? text('This device', 'Device na ito') : text('Active device', 'Aktibong device')}</strong>
+            <time dateTime={(session.created_at || '').replace(' ', 'T')}>{text('Started:', 'Nagsimula:')} {session.created_at ? formatLoginDate(session.created_at, language) : text('Unknown', 'Hindi alam')}</time>
+          </div>
+          <div className="account-login-history-details">
+            <span><b>{text('Device', 'Device')}</b><span title={session.user_agent || ''}>{session.user_agent || text('Unavailable', 'Hindi available')}</span></span>
+            <span><b>{text('IP address', 'IP address')}</b>{session.ip_address || text('Unavailable', 'Hindi available')}</span>
+            <span><b>{text('Refresh token expires', 'Mag-e-expire ang session sa')}</b>{formatLoginDate(session.expires_at, language)}</span>
+          </div>
+          <button type="button" className="account-active-session-revoke" onClick={() => void revokeActiveSession(session)} disabled={revokingSessionId !== null}>
+            {revokingSessionId === session.session_id
+              ? text('Ending…', 'Isinasara…')
+              : session.is_current ? text('Sign out this device', 'Mag-sign out sa device na ito') : text('Revoke session', 'I-revoke ang session')}
+          </button>
+        </article>)}
+      </section>
+    }
+    if (page === 'history') {
+      if (historyLoading) return <p className="account-menu-message" role="status">{text('Loading login history…', 'Nilo-load ang kasaysayan ng pag-login…')}</p>
+      if (historyError) return <div className="account-info-card"><Shield size={22} /><strong>{text('Could not load login history', 'Hindi ma-load ang kasaysayan ng pag-login')}</strong><p role="alert">{historyError}</p><button type="button" onClick={() => void loadLoginHistory()}>{text('Try again', 'Subukan muli')}</button></div>
+      if (loginHistory.length === 0) return <div className="account-info-card"><Shield size={22} /><strong>{text('No login history yet', 'Wala pang kasaysayan ng pag-login')}</strong><p>{text('Successful sign-ins from now on will appear here with their time, IP address, and device.', 'Lalabas dito ang mga susunod na matagumpay na pag-login kasama ang oras, IP address, at device.')}</p><button type="button" onClick={() => void loadLoginHistory()}>{text('Refresh', 'I-refresh')}</button></div>
+      return <section className="account-login-history">
+        <div className="account-login-history-toolbar"><p>{text('Your 50 most recent successful sign-ins.', 'Ang 50 pinakahuling matagumpay na pag-login mo.')}</p><button type="button" onClick={() => void loadLoginHistory()}>{text('Refresh', 'I-refresh')}</button></div>
+        {loginHistory.map((entry) => <article className="account-login-history-item" key={entry.id}>
+          <div className="account-login-history-heading"><strong>{entry.description || text('Successful sign-in', 'Matagumpay na pag-login')}</strong><time dateTime={entry.created_at.replace(' ', 'T')}>{formatLoginDate(entry.created_at, language)}</time></div>
+          <div className="account-login-history-details">
+            <span><b>{text('IP address', 'IP address')}</b>{entry.ip_address || text('Unavailable', 'Hindi available')}</span>
+            <span><b>{text('Device', 'Device')}</b><span title={entry.user_agent || ''}>{entry.user_agent || text('Unavailable', 'Hindi available')}</span></span>
+          </div>
+        </article>)}
+      </section>
+    }
     if (page === 'help') return <div className="account-info-card"><CircleHelp size={22} /><strong>{text('Need help?', 'Kailangan ng tulong?')}</strong><p>{text('For assistance with community concerns or reports, contact the Baco Municipal Office.', 'Para sa tulong tungkol sa mga concern o report, makipag-ugnayan sa Munisipyo ng Baco.')}</p></div>
     return <div className="account-info-card"><span className="account-about-mark">B</span><strong>Baco360</strong><p>{text('A community reporting and engagement platform for the Municipality of Baco, Oriental Mindoro.', 'Isang platform para sa pag-uulat at pakikilahok ng komunidad sa Bayan ng Baco, Oriental Mindoro.')}</p><small>{text('Community. Connected.', 'Komunidad. Konektado.')}</small></div>
   }
 
-  return createPortal(<div className="account-menu-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-    <aside className="account-menu-drawer" role="dialog" aria-modal="true" aria-labelledby="account-menu-title">
-      <header className="account-menu-header">
-        {page !== 'home' && <button className="icon-button" type="button" aria-label={text('Back to settings', 'Bumalik sa settings')} onClick={() => navigate('home')}><ChevronLeft size={20} /></button>}
-        <h2 id="account-menu-title">{pageTitles[page]}</h2><button className="icon-button" type="button" aria-label={text('Close menu', 'Isara ang menu')} onClick={onClose}><X size={20} /></button>
-      </header>
-      <div className="account-menu-content">{error && <p className="account-menu-message is-error" role="alert">{error}</p>}{notice && <p className="account-menu-message" role="status">{notice}</p>}{pageContent()}</div>
-      <footer className="account-menu-footer"><button type="button" onClick={onSignOut}><LogOut size={18} />{text('Sign out', 'Mag-sign out')}</button></footer>
-    </aside>
-  </div>, document.body)
+  return <>
+    {createPortal(<div className={`account-menu-backdrop${isClosing ? ' is-closing' : ''}`} onAnimationEnd={(event) => {
+      if (event.target === event.currentTarget && event.animationName === 'account-menu-backdrop-out') onCloseComplete()
+    }} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <aside className={`account-menu-drawer${isClosing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="account-menu-title">
+        <header className="account-menu-header">
+          {page !== 'home' && <button className="icon-button" type="button" aria-label={text('Back to settings', 'Bumalik sa settings')} onClick={() => navigate('home')}><ChevronLeft size={20} /></button>}
+          <h2 id="account-menu-title">{pageTitles[page]}</h2><button className="icon-button" type="button" aria-label={text('Close menu', 'Isara ang menu')} onClick={onClose}><X size={20} /></button>
+        </header>
+        <div className="account-menu-content">{error && <p className="account-menu-message is-error" role="alert">{error}</p>}{notice && <p className="account-menu-message" role="status">{notice}</p>}{pageContent()}</div>
+        <footer className="account-menu-footer"><button type="button" onClick={onSignOut}><LogOut size={18} />{text('Sign out', 'Mag-sign out')}</button></footer>
+      </aside>
+    </div>, document.body)}
+    {accountAction && createPortal(<div className="account-action-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !accountActionBusy) setAccountAction(null) }}>
+      <section className="account-action-dialog" role="dialog" aria-modal="true" aria-labelledby="account-action-title">
+        <header><h2 id="account-action-title">{accountAction === 'choose'
+          ? text('Account options', 'Mga opsyon sa account')
+          : accountAction === 'delete'
+            ? text('Delete account', 'Burahin ang account')
+            : accountAction === 'deactivate'
+              ? text('Deactivate account', 'I-deactivate ang account')
+              : text('Confirm deactivation', 'Kumpirmahin ang pag-deactivate')}</h2>
+          <button type="button" className="icon-button" aria-label={text('Close dialog', 'Isara ang dialog')} disabled={accountActionBusy} onClick={() => setAccountAction(null)}><X size={18} /></button>
+        </header>
+        {accountActionError && <p className="account-menu-message is-error" role="alert">{accountActionError}</p>}
+        {accountAction === 'choose' && <>
+          <p>{text('Choose what you would like to do with your account.', 'Piliin kung ano ang gusto mong gawin sa iyong account.')}</p>
+          <div className="account-action-buttons">
+            <button type="button" className="account-action-danger" onClick={() => { setAccountActionError(''); setAccountAction('delete') }}>{text('Delete account', 'Burahin ang account')}</button>
+            <button type="button" className="account-action-secondary" onClick={() => { setAccountActionError(''); setAccountAction('deactivate') }}>{text('Deactivate account', 'I-deactivate ang account')}</button>
+          </div>
+        </>}
+        {accountAction === 'delete' && <form className="account-action-form" onSubmit={(event) => void submitAccountDeletion(event)}>
+          <p>{text('Deletion is permanent. Accounts with reports or comments cannot be deleted; deactivate your account instead.', 'Permanenteng mabubura ang account. Hindi mabubura ang account na may reports o comments; i-deactivate na lang ito.')}</p>
+          {user.has_password === false
+            ? <div className="account-action-password-note"><p>{text('Set a password before deleting your Google account.', 'Magtakda muna ng password bago burahin ang Google account.')}</p><button type="button" className="account-action-secondary" onClick={() => { setAccountAction(null); navigate('password') }}>{text('Set a password', 'Magtakda ng password')}</button></div>
+            : <>
+              <label>{text('Password', 'Password')}<input required type="password" autoComplete="current-password" value={deletionPassword} onChange={(event) => setDeletionPassword(event.target.value)} disabled={accountActionBusy} /></label>
+              <button type="submit" className="account-action-danger" disabled={accountActionBusy}>{accountActionBusy ? text('Deleting…', 'Binubura…') : text('Permanently delete account', 'Burahin nang permanente ang account')}</button>
+            </>}
+        </form>}
+        {accountAction === 'deactivate' && <form className="account-action-form" onSubmit={continueDeactivation}>
+          <p>{text('Why do you want to deactivate your account?', 'Bakit mo gustong i-deactivate ang account?')}</p>
+          <label>{text('Choose a reason', 'Pumili ng dahilan')}<select required value={deactivationReason} onChange={(event) => setDeactivationReason(event.target.value)} disabled={accountActionBusy}>
+            <option value="">{text('Select a reason', 'Pumili ng dahilan')}</option>
+            {deactivationReasons.map(([value, en, tl]) => <option key={value} value={value}>{text(en, tl)}</option>)}
+          </select></label>
+          {deactivationReason === 'other' && <label>{text('Tell us more', 'Magbigay ng detalye')}<textarea required maxLength={500} value={deactivationDetails} onChange={(event) => setDeactivationDetails(event.target.value)} disabled={accountActionBusy} /></label>}
+          <div className="account-action-buttons">
+            <button type="button" className="account-action-secondary" onClick={() => setAccountAction('choose')} disabled={accountActionBusy}>{text('Back', 'Bumalik')}</button>
+            <button type="submit" className="account-action-danger" disabled={accountActionBusy}>{text('Continue', 'Magpatuloy')}</button>
+          </div>
+        </form>}
+        {accountAction === 'confirm-deactivation' && <>
+          <p>{text('Your account will be deactivated and you will be signed out. You can sign in again and confirm to reactivate it.', 'Madi-deactivate ang account at masa-sign out ka. Maaari kang mag-sign in muli at magkumpirma para i-reactivate ito.')}</p>
+          <p className="account-action-reason">{text('Reason:', 'Dahilan:')} {deactivationReasons.find(([value]) => value === deactivationReason)?.[language === 'tl' ? 2 : 1]}{deactivationDetails.trim() ? ` — ${deactivationDetails.trim()}` : ''}</p>
+          <div className="account-action-buttons">
+            <button type="button" className="account-action-secondary" onClick={() => { setAccountActionError(''); setAccountAction('deactivate') }} disabled={accountActionBusy}>{text('Back', 'Bumalik')}</button>
+            <button type="button" className="account-action-danger" onClick={() => void confirmDeactivation()} disabled={accountActionBusy}>{accountActionBusy ? text('Deactivating…', 'Dini-deactivate…') : text('Confirm deactivation', 'Kumpirmahin')}</button>
+          </div>
+        </>}
+      </section>
+    </div>, document.body)}
+  </>
 }

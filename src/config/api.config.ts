@@ -21,10 +21,15 @@ export const API_ENDPOINTS = {
   
   // User
   ME: '/user/me',
+  LOGIN_HISTORY: '/user/login-history',
+  ACTIVE_SESSIONS: '/user/sessions',
+  REVOKE_SESSION: (sessionId: string) => `/user/sessions/${encodeURIComponent(sessionId)}`,
   UPDATE_PROFILE: '/user/profile',
   REQUEST_CONTACT_CHANGE: '/user/profile/contact-change',
   VERIFY_CONTACT_CHANGE: '/user/profile/contact-change/verify',
   CHANGE_PASSWORD: '/user/password',
+  DELETE_ACCOUNT: '/user/account',
+  DEACTIVATE_ACCOUNT: '/user/account/deactivate',
   RESIDENT_PROFILE: '/user/resident-profile',
   RESIDENT_PROFILES_FOR_REVIEW: '/admin/resident-profiles',
   RESIDENT_PROFILE_VERIFICATION: (id: number) => `/admin/resident-profiles/${id}/verification`,
@@ -44,6 +49,7 @@ export const API_ENDPOINTS = {
 
   // Resident community reports
   COMMUNITY_REPORTS: '/community/reports',
+  COMMUNITY_REPORT_POST: (id: number) => `/community/reports/${id}/view`,
   COMMUNITY_REPORT_COMMENTS: (id: number) => `/community/reports/${id}/comments`,
   COMMUNITY_REPORT_HEART: (id: number) => `/community/reports/${id}/heart`,
   
@@ -83,6 +89,9 @@ export const API_ENDPOINTS = {
   ARCHIVE_ANNOUNCEMENT: (id: number) => `/announcements/${id}/archive`,
   RESTORE_ANNOUNCEMENT: (id: number) => `/announcements/${id}/restore`,
   ANNOUNCEMENT_READ: (id: number) => `/announcements/${id}/read`,
+  EMERGENCY_CONTACTS: '/emergency-contacts',
+  ADMIN_EMERGENCY_CONTACTS: '/admin/emergency-contacts',
+  ADMIN_EMERGENCY_CONTACT: (id: number) => `/admin/emergency-contacts/${id}`,
   COMMUNITY_EVENTS: '/community-events',
   COMMUNITY_EVENT_BY_ID: (id: number) => `/community-events/${id}`,
   NOTIFICATIONS: '/notifications',

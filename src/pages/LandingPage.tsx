@@ -6,9 +6,9 @@ import RegisterPage from './RegisterPage'
 import { websiteContentImageUrl, websiteContentService, type WebsiteContentData } from '../services/websiteContent.service'
 
 interface Props {
-  onLogin: (email: string, password: string, remember: boolean) => void | Promise<void>
+  onLogin: (email: string, password: string, remember: boolean, reactivate?: boolean) => void | Promise<void>
   onRegister: (name: string, email: string, phone: string, password: string, passwordConfirmation: string) => void | Promise<void>
-  onGoogleSignIn: (idToken: string, intent: 'sign_in' | 'sign_up') => Promise<void>
+  onGoogleSignIn: (idToken: string, intent: 'sign_in' | 'sign_up' | 'reactivate') => Promise<void>
   successMessage?: string | null
 }
 
@@ -38,12 +38,17 @@ function LandingBrand({ footer = false, siteName, logoPath }: { footer?: boolean
 export default function LandingPage({ onLogin, onRegister, onGoogleSignIn, successMessage }: Props) {
   const [authModal, setAuthModal] = useState<'sign-in' | 'sign-up' | null>(null)
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null)
+  const [signupTermsAccepted, setSignupTermsAccepted] = useState(false)
+  const [googleSignupToken, setGoogleSignupToken] = useState<string | null>(null)
+  const [googleConsentSubmitting, setGoogleConsentSubmitting] = useState(false)
+  const [googleConsentError, setGoogleConsentError] = useState<string | null>(null)
   const [activeSection, setActiveSection] = useState(() => {
     const section = window.location.hash.slice(1)
     return ['home', 'about', 'announcements', 'gallery', 'faqs', 'help'].includes(section) ? section : 'home'
   })
   const [websiteContent, setWebsiteContent] = useState<WebsiteContentData | null>(null)
   const [contentLoadError, setContentLoadError] = useState(false)
+
   useEffect(() => {
     let active = true
     async function loadWebsiteContent() {
@@ -67,7 +72,45 @@ export default function LandingPage({ onLogin, onRegister, onGoogleSignIn, succe
 
   async function submitRegistration(...args: Parameters<Props['onRegister']>) {
     await onRegister(...args)
-    setAuthModal('sign-in')
+    openAuthModal('sign-in')
+  }
+
+  function openAuthModal(next: 'sign-in' | 'sign-up' | null) {
+    setSignupTermsAccepted(false)
+    setGoogleSignupToken(null)
+    setGoogleConsentError(null)
+    setGoogleConsentSubmitting(false)
+    setAuthModal(next)
+  }
+
+  function closeAuthModal() {
+    openAuthModal(null)
+  }
+
+  function requestGoogleSignupConsent(idToken: string) {
+    setGoogleSignupToken(idToken)
+    setGoogleConsentError(null)
+    setLegalModal('terms')
+  }
+
+  function closeLegalModal() {
+    setLegalModal(null)
+    setGoogleSignupToken(null)
+    setGoogleConsentError(null)
+  }
+
+  async function continueGoogleSignup() {
+    if (!googleSignupToken || !signupTermsAccepted || googleConsentSubmitting) return
+    setGoogleConsentSubmitting(true)
+    setGoogleConsentError(null)
+    try {
+      await onGoogleSignIn(googleSignupToken, 'sign_up')
+      closeLegalModal()
+    } catch (reason) {
+      setGoogleConsentError(reason instanceof Error ? reason.message : 'Google sign-up failed. Please try again.')
+    } finally {
+      setGoogleConsentSubmitting(false)
+    }
   }
 
   function scrollToSection(event: React.MouseEvent<HTMLAnchorElement>, sectionId: string) {
@@ -109,8 +152,17 @@ export default function LandingPage({ onLogin, onRegister, onGoogleSignIn, succe
     document.body.style.overflow = 'hidden'
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (legalModal) setLegalModal(null)
-        else setAuthModal(null)
+        if (legalModal) {
+          setLegalModal(null)
+          setGoogleSignupToken(null)
+          setGoogleConsentError(null)
+        } else {
+          setAuthModal(null)
+          setSignupTermsAccepted(false)
+          setGoogleSignupToken(null)
+          setGoogleConsentError(null)
+          setGoogleConsentSubmitting(false)
+        }
       }
     }
     window.addEventListener('keydown', closeOnEscape)
@@ -143,8 +195,8 @@ export default function LandingPage({ onLogin, onRegister, onGoogleSignIn, succe
         <a className={activeSection === 'help' ? 'is-active' : undefined} aria-current={activeSection === 'help' ? 'location' : undefined} href="#help" onClick={(event) => scrollToSection(event, 'help')}>Help</a>
       </nav>
       <div className="landing-nav-actions">
-        <button className="landing-signin" type="button" onClick={() => setAuthModal('sign-in')}>Sign in</button>
-        <button className="landing-signup" style={{ backgroundColor: primaryColor }} type="button" onClick={() => setAuthModal('sign-up')}>Sign up <ArrowRight size={15} /></button>
+        <button className="landing-signin" type="button" onClick={() => openAuthModal('sign-in')}>Sign in</button>
+        <button className="landing-signup" style={{ backgroundColor: primaryColor }} type="button" onClick={() => openAuthModal('sign-up')}>Sign up <ArrowRight size={15} /></button>
       </div>
     </header>
 
@@ -156,7 +208,7 @@ export default function LandingPage({ onLogin, onRegister, onGoogleSignIn, succe
           <h1>{settings?.hero_title || siteName}</h1>
           <p>{settings?.hero_description || 'A clearer way to share community concerns and follow what happens next.'}</p>
           <div className="landing-hero-actions">
-            <button className="landing-hero-primary" style={{ backgroundColor: primaryColor }} type="button" onClick={() => setAuthModal('sign-up')}>Create an account <ArrowRight size={16} /></button>
+            <button className="landing-hero-primary" style={{ backgroundColor: primaryColor }} type="button" onClick={() => openAuthModal('sign-up')}>Create an account <ArrowRight size={16} /></button>
             <a href="#about" onClick={(event) => scrollToSection(event, 'about')}>Explore Baco360 <ArrowDown size={15} /></a>
           </div>
         </div>
@@ -216,28 +268,28 @@ export default function LandingPage({ onLogin, onRegister, onGoogleSignIn, succe
             {settings.contact_address && <span>{settings.contact_address}</span>}
           </div>}
         </div>
-        <div className="landing-help-actions"><button className="landing-help-signin" type="button" onClick={() => setAuthModal('sign-in')}>Sign in</button><button className="landing-signup" style={{ backgroundColor: primaryColor }} type="button" onClick={() => setAuthModal('sign-up')}>Sign up <ArrowRight size={15} /></button></div>
+        <div className="landing-help-actions"><button className="landing-help-signin" type="button" onClick={() => openAuthModal('sign-in')}>Sign in</button><button className="landing-signup" style={{ backgroundColor: primaryColor }} type="button" onClick={() => openAuthModal('sign-up')}>Sign up <ArrowRight size={15} /></button></div>
       </section>
     </main>
 
     {authModal && createPortal(<div className="landing-auth-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) setAuthModal(null)
+      if (event.target === event.currentTarget) closeAuthModal()
     }}>
       <section key={authModal} className="landing-auth-dialog" role="dialog" aria-modal="true" aria-label={authModal === 'sign-in' ? 'Sign in to Baco360' : 'Sign up for Baco360'}>
-        <button className="landing-auth-close" type="button" aria-label="Close dialog" onClick={() => setAuthModal(null)}><X size={19} /></button>
+        <button className="landing-auth-close" type="button" aria-label="Close dialog" onClick={closeAuthModal}><X size={19} /></button>
         <div className="landing-auth-dialog-scroll">
           {authModal === 'sign-in'
-            ? <LoginPage modal onLogin={onLogin} onRegister={() => setAuthModal('sign-up')} onGoogleSignIn={onGoogleSignIn} successMessage={successMessage} />
-            : <RegisterPage modal onRegister={submitRegistration} onBack={() => setAuthModal('sign-in')} onOpenLegal={setLegalModal} onGoogleSignIn={onGoogleSignIn} />}
+            ? <LoginPage modal onLogin={onLogin} onRegister={() => openAuthModal('sign-up')} onGoogleSignIn={onGoogleSignIn} successMessage={successMessage} />
+            : <RegisterPage modal onRegister={submitRegistration} onBack={() => openAuthModal('sign-in')} onOpenLegal={setLegalModal} onGoogleSignIn={onGoogleSignIn} onRequireGoogleSignupConsent={requestGoogleSignupConsent} acceptedTerms={signupTermsAccepted} onAcceptedTermsChange={setSignupTermsAccepted} />}
         </div>
       </section>
       {legalModal && <div className="landing-legal-backdrop" role="presentation" onMouseDown={(event) => {
-        if (event.target === event.currentTarget) setLegalModal(null)
+        if (event.target === event.currentTarget) closeLegalModal()
       }}>
         <section className="landing-legal-modal" role="dialog" aria-modal="true" aria-labelledby="landing-legal-title">
           <header>
             <div><span className="auth-step"><ShieldCheck size={15} /> BACO360 ACCOUNT</span><h2 id="landing-legal-title">{legalModal === 'terms' ? 'Terms and Conditions' : 'Privacy Policy'}</h2></div>
-            <button className="landing-auth-close" type="button" aria-label="Close policy" onClick={() => setLegalModal(null)}><X size={19} /></button>
+            <button className="landing-auth-close" type="button" aria-label="Close policy" onClick={closeLegalModal}><X size={19} /></button>
           </header>
           <div className="landing-legal-content">
             {legalModal === 'terms' ? <>
@@ -270,6 +322,21 @@ export default function LandingPage({ onLogin, onRegister, onGoogleSignIn, succe
               <p>This notice may be updated when Baco360’s features or information practices change. The latest version will be available here.</p>
             </>}
           </div>
+          {googleSignupToken && <div className="landing-legal-consent">
+            <label>
+              <input type="checkbox" checked={signupTermsAccepted} onChange={(event) => setSignupTermsAccepted(event.target.checked)} disabled={googleConsentSubmitting} />
+              <span>I agree to the Terms and Conditions and Privacy Policy.</span>
+            </label>
+            <div className="landing-legal-consent-actions">
+              <button type="button" className="landing-legal-review" onClick={() => setLegalModal(legalModal === 'terms' ? 'privacy' : 'terms')} disabled={googleConsentSubmitting}>
+                Read {legalModal === 'terms' ? 'Privacy Policy' : 'Terms and Conditions'}
+              </button>
+              <button type="button" className="landing-legal-accept" onClick={() => void continueGoogleSignup()} disabled={!signupTermsAccepted || googleConsentSubmitting}>
+                {googleConsentSubmitting ? 'Signing up…' : 'Agree and continue'}
+              </button>
+            </div>
+            {googleConsentError && <p className="landing-legal-consent-error" role="alert">{googleConsentError}</p>}
+          </div>}
         </section>
       </div>}
     </div>, document.body)}

@@ -7,17 +7,19 @@ interface Props {
   onRegister: (name: string, email: string, phone: string, password: string, passwordConfirmation: string) => void | Promise<void>
   onBack: () => void 
   onOpenLegal: (document: 'terms' | 'privacy') => void
-  onGoogleSignIn: (idToken: string, intent: 'sign_in' | 'sign_up') => Promise<void>
+  onGoogleSignIn: (idToken: string, intent: 'sign_in' | 'sign_up' | 'reactivate') => Promise<void>
+  onRequireGoogleSignupConsent: (idToken: string) => void
+  acceptedTerms: boolean
+  onAcceptedTermsChange: (accepted: boolean) => void
   modal: true
 }
 
-export default function RegisterPage({ onRegister, onBack, onOpenLegal, onGoogleSignIn, modal }: Props) {
+export default function RegisterPage({ onRegister, onBack, onOpenLegal, onGoogleSignIn, onRequireGoogleSignupConsent, acceptedTerms, onAcceptedTermsChange, modal }: Props) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
-  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   
@@ -93,7 +95,7 @@ export default function RegisterPage({ onRegister, onBack, onOpenLegal, onGoogle
               {isLoading ? 'Creating account...' : 'Create account'} <ArrowRight size={16} />
             </button>
             <label className="auth-terms">
-              <input type="checkbox" required checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} disabled={isLoading} />
+              <input type="checkbox" required checked={acceptedTerms} onChange={(event) => onAcceptedTermsChange(event.target.checked)} disabled={isLoading} />
               <span>I agree to the <button type="button" className="legal-link" onClick={() => onOpenLegal('terms')}>Terms and Conditions</button> and <button type="button" className="legal-link" onClick={() => onOpenLegal('privacy')}>Privacy Policy</button>.</span>
             </label>
           </form>
@@ -101,7 +103,10 @@ export default function RegisterPage({ onRegister, onBack, onOpenLegal, onGoogle
           <GoogleSignInButton
             intent="sign_up"
             onCredential={async (idToken, intent) => {
-              if (!acceptedTerms) throw new Error('Please accept the Terms and Conditions and Privacy Policy first.')
+              if (!acceptedTerms) {
+                onRequireGoogleSignupConsent(idToken)
+                return
+              }
               await onGoogleSignIn(idToken, intent)
             }}
           />

@@ -27,6 +27,7 @@ import TwoFactorAuthPage from './pages/TwoFactorAuthPage'
 import LandingPage from './pages/LandingPage.tsx'
 import SuccessModal from './components/SuccessModal'
 import AnnouncementModal from './components/AnnouncementModal'
+import EmergencyContactsModal from './components/EmergencyContactsModal'
 import { type Category, type Notification, type Report, type User, type UserRole } from './data/types'
 import type { ViewKey } from './types'
 import { applyLanguage, type Language } from './i18n'
@@ -52,6 +53,7 @@ function AppContent() {
   const [userSearchQuery, setUserSearchQuery] = useState('')
   const [selectedReportId, setSelectedReportId] = useState<number | null>(null)
   const [isAdminAttachmentModalOpen, setIsAdminAttachmentModalOpen] = useState(false)
+  const [isEmergencyContactsModalOpen, setIsEmergencyContactsModalOpen] = useState(false)
   const [deepLinkedReportId] = useState<number | null>(() => {
     const value = new URLSearchParams(window.location.search).get('report')
     if (!value || !/^[1-9]\d*$/.test(value)) return null
@@ -206,13 +208,14 @@ function AppContent() {
     const playAlert = (isHighPriority: boolean) => {
       const audio = notificationAudioRef.current
       if (!audio || audio.state !== 'running') return
-      const playTone = (frequency: number, startAt: number, duration: number, volume: number) => {
+      const playBellPartial = (frequency: number, volume: number, startAt: number, duration: number) => {
         const oscillator = audio.createOscillator()
         const gain = audio.createGain()
         oscillator.type = 'sine'
         oscillator.frequency.value = frequency
         gain.gain.setValueAtTime(0.0001, startAt)
-        gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.02)
+        gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.012)
+        gain.gain.exponentialRampToValueAtTime(volume * 0.12, startAt + 0.16)
         gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration)
         oscillator.connect(gain)
         gain.connect(audio.destination)
@@ -220,12 +223,10 @@ function AppContent() {
         oscillator.stop(startAt + duration)
       }
       const now = audio.currentTime
-      if (isHighPriority) {
-        playTone(880, now, 0.18, 0.18)
-        playTone(1175, now + 0.2, 0.24, 0.22)
-      } else {
-        playTone(660, now, 0.14, 0.09)
-      }
+      const loudness = isHighPriority ? 0.28 : 0.22
+      playBellPartial(880, loudness, now, 0.62)
+      playBellPartial(1320, loudness * 0.42, now, 0.48)
+      playBellPartial(1760, loudness * 0.18, now, 0.36)
     }
 
     const refreshNotifications = async () => {
@@ -396,10 +397,10 @@ function AppContent() {
     showSuccess('Report assignment updated successfully.')
   }
 
-  async function handleLogin(email: string, password: string, remember: boolean) {
+  async function handleLogin(email: string, password: string, remember: boolean, reactivate = false) {
     setPendingAuthEmail('')
     setLoginSuccessMessage(null)
-    const result = await login(email, password, remember)
+    const result = await login(email, password, remember, reactivate)
     if (result.requires2FA) {
       setPendingAuthEmail(email)
       setView('2fa')
@@ -411,7 +412,7 @@ function AppContent() {
     if (!response.success) throw new Error(response.message || 'Registration failed')
     setLoginSuccessMessage('Account created. You can now sign in.')
   }
-  async function handleGoogleSignIn(idToken: string, intent: 'sign_in' | 'sign_up') {
+  async function handleGoogleSignIn(idToken: string, intent: 'sign_in' | 'sign_up' | 'reactivate') {
     setLoginSuccessMessage(null)
     const response = await authService.googleSignIn(idToken, intent)
     const result = response.data
@@ -493,16 +494,32 @@ function AppContent() {
     const response = await userService.changePassword(data)
     if (!response.success) throw new Error(response.message || 'Failed to change password')
   }
-  async function handleLogout() { await logout(); setView('landing'); setReports([]); setCategories([]); setUsers([]) }
+  async function deleteOwnAccount(password: string) {
+    const response = await userService.deleteOwnAccount(password)
+    if (!response.success) throw new Error(response.message || 'Failed to delete account')
+    await logout(false)
+    setView('landing')
+    setIsEmergencyContactsModalOpen(false)
+    setReports([]); setCategories([]); setUsers([]); setNotifications([])
+  }
+  async function deactivateOwnAccount(reason: string, reasonDetails: string) {
+    const response = await userService.deactivateOwnAccount(reason, reasonDetails)
+    if (!response.success) throw new Error(response.message || 'Failed to deactivate account')
+    await logout(false)
+    setView('landing')
+    setIsEmergencyContactsModalOpen(false)
+    setReports([]); setCategories([]); setUsers([]); setNotifications([])
+  }
+  async function handleLogout() { await logout(); setView('landing'); setIsEmergencyContactsModalOpen(false); setReports([]); setCategories([]); setUsers([]) }
 
   if (isAuthLoading) return <div className="auth-loading" role="status">Restoring your session...</div>
   if (view === 'landing') return <LandingPage onLogin={handleLogin} onRegister={registerUser} onGoogleSignIn={handleGoogleSignIn} successMessage={loginSuccessMessage} />
   if (view === '2fa') return <><div className="auth-wrapper"><LanguageSelect language={language} onLanguageChange={changeLanguage} /><TwoFactorAuthPage email={pendingAuthEmail} onVerify={handle2FAVerify} onBack={() => setView('landing')} /></div></>
   return <>
     <div className={`app-shell${role === 'resident' ? ' app-shell--resident' : ''}`}>
-      <Header role={role} user={user} language={language} onLanguageChange={changeLanguage} onOpenLogin={handleLogout} reports={reports} categories={categories} users={users} notifications={notifications} onOpenNotification={openNotification} onDeleteNotification={deleteNotification} onDeleteAllNotifications={deleteAllNotifications} onMarkAllNotificationsRead={markAllNotificationsRead} onSelectReport={selectReport} onNavigate={navigate} onSearchUsers={setUserSearchQuery} onUpdateProfile={updateOwnProfile} onChangePassword={changeOwnPassword} onNavigateWebsiteContent={navigateToWebsiteContent} onNavigateResidentProfile={() => navigate('resident-profile')} onUploadProfilePhoto={uploadOwnProfilePhoto} onRemoveProfilePhoto={removeOwnProfilePhoto} />
+      <Header role={role} user={user} language={language} onLanguageChange={changeLanguage} onOpenLogin={handleLogout} reports={reports} categories={categories} users={users} notifications={notifications} onOpenEmergencyContacts={() => setIsEmergencyContactsModalOpen(true)} onOpenNotification={openNotification} onDeleteNotification={deleteNotification} onDeleteAllNotifications={deleteAllNotifications} onMarkAllNotificationsRead={markAllNotificationsRead} onSelectReport={selectReport} onNavigate={navigate} onSearchUsers={setUserSearchQuery} onUpdateProfile={updateOwnProfile} onChangePassword={changeOwnPassword} onDeleteOwnAccount={deleteOwnAccount} onDeactivateOwnAccount={deactivateOwnAccount} onNavigateWebsiteContent={navigateToWebsiteContent} onNavigateResidentProfile={() => navigate('resident-profile')} onUploadProfilePhoto={uploadOwnProfilePhoto} onRemoveProfilePhoto={removeOwnProfilePhoto} />
       <div className="app-body">
-        {role !== 'resident' && <Sidebar role={role} view={view} onNavigate={navigate} />}
+        {role !== 'resident' && <Sidebar role={role} view={view} onNavigate={navigate} onOpenEmergencyContacts={() => setIsEmergencyContactsModalOpen(true)} />}
         <main className="main-area">
           {(view === 'resident-dashboard' || view === 'resident-reports') && <ResidentDashboard reports={reports} categories={categories} onNavigate={navigate} onSelectReport={selectReport} showAllReports={view === 'resident-reports'} isLoading={isReportsLoading} />}
           {view === 'resident-profile' && role === 'resident' && user && <ResidentProfilePage user={user} onCancel={() => navigate('resident-dashboard')} />}
@@ -525,8 +542,9 @@ function AppContent() {
       </div>
       {role === 'resident' && <ResidentBottomNav view={view} onNavigate={navigate} />}
       {role === 'admin' && isAdminAttachmentModalOpen && <ReportAttachmentsPage reports={reports} categories={categories} onOpenReport={openReportFromAttachments} isLoading={isReportsLoading} isModal onClose={() => setIsAdminAttachmentModalOpen(false)} />}
-      {selectedReport && <ReportDetailModal key={selectedReport.id} report={selectedReport} categories={categories} isStaff={role !== 'resident'} canAssign={role === 'admin'} canDelete={role === 'admin' || (role === 'resident' && selectedReport.status === 'submitted' && Number(selectedReport.resident_id) === Number(user?.id))} onClose={() => setSelectedReportId(null)} onAddComment={addComment} onUpdateReport={updateReport} onDeleteReport={deleteReport} onAssignReport={assignReport} staffUsers={users.filter((u) => u.role === 'staff' && u.is_active)} />}
+      {selectedReport && <ReportDetailModal key={selectedReport.id} report={selectedReport} categories={categories} isStaff={role !== 'resident'} canAssign={role === 'admin'} canDelete={role === 'admin' || (role === 'resident' && selectedReport.status === 'submitted' && Number(selectedReport.resident_id) === Number(user?.id))} canViewCommunityPost={role === 'admin' || role === 'staff'} onClose={() => setSelectedReportId(null)} onAddComment={addComment} onUpdateReport={updateReport} onDeleteReport={deleteReport} onAssignReport={assignReport} staffUsers={users.filter((u) => u.role === 'staff' && u.is_active)} />}
     </div>
+    {isEmergencyContactsModalOpen && <EmergencyContactsModal role={role} language={language} onClose={() => setIsEmergencyContactsModalOpen(false)} />}
     {selectedAnnouncement && <AnnouncementModal
       title={selectedAnnouncement.report_title ?? (language === 'tl' ? 'Announcement' : 'Announcement')}
       message={selectedAnnouncement.announcement_message ?? ''}
