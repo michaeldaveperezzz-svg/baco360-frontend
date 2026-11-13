@@ -2505,21 +2505,21 @@ input[type='checkbox'] { width: 13px; height: 13px; margin: 0; accent-color: var
   .report-print-area { position: absolute; inset: 0; display: block !important; width: 100%; padding: 14mm !important; color: #111; background: #fff; font: 9pt/1.4 Arial, sans-serif; }
   .print-brand-header { margin-bottom: 5mm; padding-bottom: 4mm; display: flex; align-items: center; gap: 5mm; border-bottom: 1px solid #c8cdd1; }
   .print-brand-header img { width: 18mm; height: 18mm; flex: 0 0 18mm; object-fit: contain; }
-  .print-brand-header span { color: #394750; font-size: 8pt; font-weight: 700; }
+  .print-brand-header span { color: #000; font-size: 8pt; font-weight: 700; }
   .print-brand-header h1 { margin: 1mm 0; font-size: 18pt; }
   .print-brand-header h2 { margin: 1mm 0 0; font-size: 11pt; }
   .print-brand-header p { margin: 1mm 0 0; font-size: 9pt; }
   .print-meta { margin: 4mm 0; display: flex; flex-wrap: wrap; gap: 4mm 12mm; }
   .print-meta > span, .print-meta strong { display: block; }
-  .print-meta strong { margin-bottom: 1mm; color: #45515a; font-size: 8pt; text-transform: uppercase; }
-  .print-filter-summary, .document-print-filters { margin: 4mm 0; color: #4b555d; font-size: 8pt; }
+  .print-meta strong { margin-bottom: 1mm; color: #000; font-size: 8pt; text-transform: uppercase; }
+  .print-filter-summary, .document-print-filters { margin: 4mm 0; color: #000; font-size: 8pt; }
   .print-datetime { display: inline-flex; flex-direction: column; gap: .5mm; white-space: nowrap; }
-  .print-datetime small { color: #4f5b64; font-size: 7.5pt; }
+  .print-datetime small { color: #000; font-size: 7.5pt; }
   .document-print-area h1, .analytics-print-area h1, .report-print-area h1 { margin: 0; font-size: 18pt; }
   .analytics-print-area h2, .report-print-area h2 { margin: 5mm 0 2mm; padding-bottom: 1mm; border-bottom: 1px solid #bbb; font-size: 12pt; }
   .report-print-summary { margin: 5mm 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 2mm 6mm; }
   .report-print-summary span, .report-print-summary strong { display: block; }
-  .report-print-summary strong { margin-bottom: 1mm; color: #555; }
+  .report-print-summary strong { margin-bottom: 1mm; color: #000; }
   .report-print-area section > p { margin: 1mm 0 2mm; white-space: pre-wrap; }
   .report-print-area ul { margin: 1mm 0; padding-left: 5mm; }
   .report-print-area li { margin-bottom: 2mm; break-inside: avoid; }
@@ -2538,10 +2538,10 @@ input[type='checkbox'] { width: 13px; height: 13px; margin: 0; accent-color: var
 @media (max-width: 600px) {
   .account-menu-drawer { width: 100%; }
 }
-:root[data-theme="dark"] body :where(p, small, label, span, li, td, th, time, summary, dt, dd, [class*="-label"], [class*="-date"], [class*="-meta"], [class*="-caption"], [class*="-description"], [class*="-summary"], [class*="-detail"], [class*="-note"], [class*="-hint"], [class*="-count"], [class*="-copy"], [class*="-info"]):not(.landing-page *):not(.landing-auth-dialog *):not(.landing-legal-modal *) { color: #c0cad8 !important; }
-:root[data-theme="dark"] body :where(h1, h2, h3, h4, h5, h6, strong, b):not(.landing-page *):not(.landing-auth-dialog *):not(.landing-legal-modal *) { color: #e7edf5 !important; }
-:root[data-theme="dark"] body :where(a:not([class*="primary"]), .subtle-link, .text-button, .nav-item, .account-menu-row, .account-menu-subrows button, button.button-quiet, button.button-outline):not(.landing-page *):not(.landing-auth-dialog *):not(.landing-legal-modal *) { color: #a9c5ff !important; }
-:root[data-theme="dark"] body button:not([class*="primary"]):not([class*="danger"]):not([class*="delete"]):not([class*="status"]):not(.landing-page *):not(.landing-auth-dialog *):not(.landing-legal-modal *) { color: #c0cad8; }
+:root[data-theme="dark"] body :where(p, small, label, span, li, td, th, time, summary, dt, dd, [class*="-label"], [class*="-date"], [class*="-meta"], [class*="-caption"], [class*="-description"], [class*="-summary"], [class*="-detail"], [class*="-note"], [class*="-hint"], [class*="-count"], [class*="-copy"], [class*="-info"]):not(.landing-page *):not(.landing-auth-dialog *):not(.landing-legal-modal *):not(.document-print-area *):not(.analytics-print-area *):not(.report-print-area *) { color: #c0cad8 !important; }
+:root[data-theme="dark"] body :where(h1, h2, h3, h4, h5, h6, strong, b):not(.landing-page *):not(.landing-auth-dialog *):not(.landing-legal-modal *):not(.document-print-area *):not(.analytics-print-area *):not(.report-print-area *) { color: #e7edf5 !important; }
+:root[data-theme="dark"] body :where(a:not([class*="primary"]), .subtle-link, .text-button, .nav-item, .account-menu-row, .account-menu-subrows button, button.button-quiet, button.button-outline):not(.landing-page *):not(.landing-auth-dialog *):not(.landing-legal-modal *):not(.document-print-area *):not(.analytics-print-area *):not(.report-print-area *) { color: #a9c5ff !important; }
+:root[data-theme="dark"] body button:not([class*="primary"]):not([class*="danger"]):not([class*="delete"]):not([class*="status"]):not(.landing-page *):not(.landing-auth-dialog *):not(.landing-legal-modal *):not(.document-print-area *):not(.analytics-print-area *):not(.report-print-area *) { color: #c0cad8; }
 :root[data-theme="dark"] body :where(input, select, textarea):not(.landing-page *):not(.landing-auth-dialog *):not(.landing-legal-modal *) { color: #e7edf5; }
 :root[data-theme="dark"] body :where(input, textarea):not(.landing-page *):not(.landing-auth-dialog *):not(.landing-legal-modal *)::placeholder { color: #9aa8bb; opacity: 1; }
 :root[data-theme="dark"] .resident-bottom-nav-item.is-active { color: #202630 !important; }
@@ -2808,4 +2808,16 @@ input[type='checkbox'] { width: 13px; height: 13px; margin: 0; accent-color: var
 }
 @media (prefers-reduced-motion: reduce) {
   .account-menu-backdrop, .account-menu-drawer { animation-duration: .01ms; }
+}
+@media print {
+  html:root body .document-print-area,
+  html:root body .document-print-area *,
+  html:root body .analytics-print-area,
+  html:root body .analytics-print-area *,
+  html:root body .report-print-area,
+  html:root body .report-print-area * {
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

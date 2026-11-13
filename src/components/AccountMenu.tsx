@@ -3,12 +3,10 @@ import { createPortal } from 'react-dom'
 import { Accessibility, Bell, Camera, ChevronDown, ChevronLeft, CircleHelp, Globe2, ImagePlus, LogOut, Moon, Palette, PanelsTopLeft, Shield, Sun, Trash2, UserRound, X } from 'lucide-react'
 import type { Language } from '../i18n'
 import type { User } from '../data/types'
-import type { UpdateNotificationSettingsData, UpdateProfileData } from '../services/user.service'
+import type { UpdateProfileData } from '../services/user.service'
 import ProfilePhoto from './ProfilePhoto'
 
 type SettingsPage = 'home' | 'profile' | 'password' | 'notifications' | 'language' | 'accessibility' | 'theme' | 'security' | 'sessions' | 'history' | 'help' | 'about'
-type Preferences = { sms_enabled: boolean; email_enabled: boolean; report_updates_enabled: boolean; resolution_updates_enabled: boolean }
-
 interface AccountMenuProps {
   user: User
   language: Language
@@ -16,15 +14,12 @@ interface AccountMenuProps {
   onClose: () => void
   onSignOut: () => void
   onUpdateProfile: (data: UpdateProfileData) => Promise<void>
-  onUpdateNotifications: (data: UpdateNotificationSettingsData) => Promise<void>
   onChangePassword: (currentPassword: string, password: string, confirmation: string) => Promise<void>
   onNavigateWebsiteContent: () => void
   onNavigateResidentProfile: () => void
   onUploadProfilePhoto: (file: File) => Promise<void>
   onRemoveProfilePhoto: () => Promise<void>
 }
-
-const initialPreferences: Preferences = { sms_enabled: true, email_enabled: true, report_updates_enabled: true, resolution_updates_enabled: true }
 
 function getErrorMessage(reason: unknown, fallback: string) {
   if (typeof reason === 'object' && reason !== null && 'message' in reason && typeof reason.message === 'string') {
@@ -33,11 +28,10 @@ function getErrorMessage(reason: unknown, fallback: string) {
   return fallback
 }
 
-export default function AccountMenu({ user, language, onLanguageChange, onClose, onSignOut, onUpdateProfile, onUpdateNotifications, onChangePassword, onNavigateWebsiteContent, onNavigateResidentProfile, onUploadProfilePhoto, onRemoveProfilePhoto }: AccountMenuProps) {
+export default function AccountMenu({ user, language, onLanguageChange, onClose, onSignOut, onUpdateProfile, onChangePassword, onNavigateWebsiteContent, onNavigateResidentProfile, onUploadProfilePhoto, onRemoveProfilePhoto }: AccountMenuProps) {
   const [page, setPage] = useState<SettingsPage>('home')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [profile, setProfile] = useState({ name: user.name, email: user.email, phone: user.phone ?? '' })
-  const [preferences, setPreferences] = useState<Preferences>({ ...initialPreferences, ...user.notification_settings })
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
@@ -175,18 +169,6 @@ export default function AccountMenu({ user, language, onLanguageChange, onClose,
     } finally { setPhotoBusy(false) }
   }
 
-  async function togglePreference(key: keyof Preferences) {
-    const updated = { ...preferences, [key]: !preferences[key] }
-    setPreferences(updated); setError(''); setNotice('')
-    try {
-      await onUpdateNotifications({ [key]: updated[key] })
-      setNotice(text('Notification preference saved.', 'Na-save ang preference sa abiso.'))
-    } catch (reason) {
-      setPreferences(preferences)
-      setError(reason instanceof Error ? reason.message : text('Unable to save preference.', 'Hindi ma-save ang preference.'))
-    }
-  }
-
   function updateAccessibility(key: 'largeText' | 'reduceMotion', value: boolean) {
     if (key === 'largeText') setLargeText(value)
     else setReduceMotion(value)
@@ -214,7 +196,7 @@ export default function AccountMenu({ user, language, onLanguageChange, onClose,
 
   const pageTitles: Record<SettingsPage, string> = {
     home: text('Account & settings', 'Account at mga setting'), profile: text('My Profile', 'Aking Profile'),
-    password: text('Change Password', 'Palitan ang Password'), notifications: text('Notification Preferences', 'Mga Preference sa Abiso'),
+    password: text('Change Password', 'Palitan ang Password'), notifications: text('In-app Notifications', 'Mga Abiso sa App'),
     language: text('Language and Region', 'Wika at Rehiyon'), accessibility: text('Accessibility', 'Accessibility'),
     theme: text('Theme and Appearance', 'Tema at Itsura'), security: text('Security Settings', 'Mga Setting ng Seguridad'),
     sessions: text('Active Sessions', 'Mga Aktibong Session'), history: text('Login History', 'Kasaysayan ng Pag-login'),
@@ -229,7 +211,7 @@ export default function AccountMenu({ user, language, onLanguageChange, onClose,
         ? <button className="account-menu-row" type="button" onClick={onNavigateResidentProfile}><span className="account-menu-row-icon"><UserRound size={18} /></span><span>{text('My Profile', 'Aking Profile')}</span><ChevronLeft className="account-menu-row-arrow" size={16} /></button>
         : row(<UserRound size={18} />, text('My Profile', 'Aking Profile'), 'profile')}
       {row(<Accessibility size={18} />, text('Accessibility', 'Accessibility'), 'accessibility')}
-      {row(<Bell size={18} />, text('Notification Preferences', 'Mga Preference sa Abiso'), 'notifications')}
+      {row(<Bell size={18} />, text('In-app Notifications', 'Mga Abiso sa App'), 'notifications')}
       {row(<Globe2 size={18} />, text('Language and Region', 'Wika at Rehiyon'), 'language')}
       <div className="account-menu-section-label">{text('PREFERENCES & SUPPORT', 'PREFERENCE AT SUPORTA')}</div>
       {accordion('appearance', <Palette size={18} />, text('Appearance', 'Itsura'), [[text('Theme and Appearance', 'Tema at Itsura'), 'theme']], navigate)}
@@ -259,14 +241,7 @@ export default function AccountMenu({ user, language, onLanguageChange, onClose,
       <label>{text('Confirm new password', 'Kumpirmahin ang bagong password')}<input required minLength={8} type="password" autoComplete="new-password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} /></label>
       <button className="account-primary-button" type="submit" disabled={busy}>{busy ? text('Updating…', 'Ina-update…') : text('Update password', 'I-update ang password')}</button>
     </form>
-    if (page === 'notifications') return <div className="account-toggle-list">
-      {([
-        ['email_enabled', text('Email notifications', 'Mga abiso sa email')],
-        ['sms_enabled', text('SMS notifications', 'Mga abiso sa SMS')],
-        ['report_updates_enabled', text('Report updates', 'Mga update sa report')],
-        ['resolution_updates_enabled', text('Resolution updates', 'Mga update sa resolusyon')],
-      ] as Array<[keyof Preferences, string]>).map(([key, label]) => <label key={key}><span>{label}</span><input type="checkbox" checked={preferences[key]} onChange={() => void togglePreference(key)} /></label>)}
-    </div>
+    if (page === 'notifications') return <div className="account-info-card"><Bell size={22} /><strong>{text('In-app notifications', 'Mga abiso sa app')}</strong><p>{text('Report updates, assignments, address verification, and announcements appear in your notification center.', 'Lalabas sa notification center ang mga update sa report, pagtatalaga, beripikasyon ng address, at mga anunsyo.')}</p></div>
     if (page === 'language') return <div className="account-settings-form">
       <label>{text('Language', 'Wika')}<select value={language} onChange={(event) => onLanguageChange(event.target.value as Language)}><option value="en">English</option><option value="tl">Filipino</option></select></label>
       <label>{text('Region', 'Rehiyon')}<input readOnly value="Baco, Oriental Mindoro · Philippines (UTC+8)" /></label>

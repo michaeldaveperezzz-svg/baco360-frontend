@@ -25,7 +25,6 @@ export const API_ENDPOINTS = {
   REQUEST_CONTACT_CHANGE: '/user/profile/contact-change',
   VERIFY_CONTACT_CHANGE: '/user/profile/contact-change/verify',
   CHANGE_PASSWORD: '/user/password',
-  UPDATE_NOTIFICATION_SETTINGS: '/user/notification-settings',
   RESIDENT_PROFILE: '/user/resident-profile',
   RESIDENT_PROFILES_FOR_REVIEW: '/admin/resident-profiles',
   RESIDENT_PROFILE_VERIFICATION: (id: number) => `/admin/resident-profiles/${id}/verification`,
@@ -62,7 +61,6 @@ export const API_ENDPOINTS = {
   
   // Audit Logs
   AUDIT_LOGS: '/admin/audit-logs',
-  EMAIL_DELIVERIES: '/admin/email-deliveries',
   
   // Stats
   DASHBOARD_STATS: '/dashboard/stats',

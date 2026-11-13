@@ -20,8 +20,6 @@ export interface RegisterData {
   phone: string
   password: string
   password_confirmation: string
-  email_enabled?: boolean
-  sms_enabled?: boolean
 }
 
 export interface RegisterResponse {

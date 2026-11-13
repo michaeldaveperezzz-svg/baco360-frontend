@@ -4,7 +4,7 @@ import Brand from '../components/Brand'
 import GoogleSignInButton from '../components/GoogleSignInButton'
 
 interface Props { 
-  onRegister: (name: string, email: string, phone: string, password: string, passwordConfirmation: string, emailEnabled: boolean, smsEnabled: boolean) => void | Promise<void>
+  onRegister: (name: string, email: string, phone: string, password: string, passwordConfirmation: string) => void | Promise<void>
   onBack: () => void 
   onOpenLegal: (document: 'terms' | 'privacy') => void
   onGoogleSignIn: (idToken: string, intent: 'sign_in' | 'sign_up') => Promise<void>
@@ -17,8 +17,6 @@ export default function RegisterPage({ onRegister, onBack, onOpenLegal, onGoogle
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
-  const [emailUpdates, setEmailUpdates] = useState(true)
-  const [smsUpdates, setSmsUpdates] = useState(true)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -34,7 +32,7 @@ export default function RegisterPage({ onRegister, onBack, onOpenLegal, onGoogle
 
     setIsLoading(true)
     try {
-      await onRegister(name, email, phone, password, passwordConfirmation, emailUpdates, smsUpdates)
+      await onRegister(name, email, phone, password, passwordConfirmation)
     } catch (err: any) {
       setError(err?.message || 'Registration failed. Please check your information.')
       setIsLoading(false)
@@ -91,15 +89,6 @@ export default function RegisterPage({ onRegister, onBack, onOpenLegal, onGoogle
               Confirm password
               <input required minLength={8} type="password" autoComplete="new-password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} placeholder="Re-enter password" disabled={isLoading} />
             </label>
-            <fieldset className="auth-preferences">
-              <legend>Keep me updated</legend>
-              <label>
-                <input type="checkbox" checked={emailUpdates} onChange={(event) => setEmailUpdates(event.target.checked)} disabled={isLoading} /> Email notifications
-              </label>
-              <label>
-                <input type="checkbox" checked={smsUpdates} onChange={(event) => setSmsUpdates(event.target.checked)} disabled={isLoading} /> SMS text alerts
-              </label>
-            </fieldset>
             <button className="button button-primary auth-submit" type="submit" disabled={isLoading}>
               {isLoading ? 'Creating account...' : 'Create account'} <ArrowRight size={16} />
             </button>

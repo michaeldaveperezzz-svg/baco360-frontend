@@ -22,7 +22,6 @@ import AnalyticsReportsPage from './pages/AnalyticsReportsPage'
 import AuditLogsPage from './pages/AuditLogsPage'
 import AnnouncementsPage from './pages/AnnouncementsPage'
 import ResidentEventsPage from './pages/ResidentEventsPage'
-import EmailDeliveriesPage from './pages/EmailDeliveriesPage'
 import WebsiteContentPage from './pages/WebsiteContentPage'
 import TwoFactorAuthPage from './pages/TwoFactorAuthPage'
 import LandingPage from './pages/LandingPage.tsx'
@@ -34,7 +33,7 @@ import { applyLanguage, type Language } from './i18n'
 import { authService } from './services/auth.service'
 import { reportsService, type SubmitReportData, type UpdateReportData } from './services/reports.service'
 import { categoriesService } from './services/categories.service'
-import { userService, type ChangePasswordData, type CreateUserData, type UpdateNotificationSettingsData, type UpdateProfileData, type UpdateUserData } from './services/user.service'
+import { userService, type ChangePasswordData, type CreateUserData, type UpdateProfileData, type UpdateUserData } from './services/user.service'
 import { notificationsService } from './services/notifications.service'
 import { announcementsService } from './services/announcements.service'
 import './App.css'
@@ -51,7 +50,6 @@ function AppContent() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Notification | null>(null)
   const [userSearchQuery, setUserSearchQuery] = useState('')
-  const [globalNotificationSettings, setGlobalNotificationSettings] = useState({ sms_enabled: true, email_enabled: true, report_updates_enabled: true, resolution_updates_enabled: true })
   const [selectedReportId, setSelectedReportId] = useState<number | null>(null)
   const [isAdminAttachmentModalOpen, setIsAdminAttachmentModalOpen] = useState(false)
   const [deepLinkedReportId] = useState<number | null>(() => {
@@ -398,8 +396,6 @@ function AppContent() {
     showSuccess('Report assignment updated successfully.')
   }
 
-  function toggleGlobalPreference(key: keyof typeof globalNotificationSettings) { setGlobalNotificationSettings((current) => ({ ...current, [key]: !current[key] })) }
-  
   async function handleLogin(email: string, password: string, remember: boolean) {
     setPendingAuthEmail('')
     setLoginSuccessMessage(null)
@@ -410,8 +406,8 @@ function AppContent() {
     }
   }
   async function handle2FAVerify(code: string, email: string) { await verify2FA(code, email) }
-  async function registerUser(name: string, email: string, phone: string, password: string, passwordConfirmation: string, emailEnabled: boolean, smsEnabled: boolean): Promise<void> {
-    const response = await authService.register({ name, email, phone, password, password_confirmation: passwordConfirmation, email_enabled: emailEnabled, sms_enabled: smsEnabled })
+  async function registerUser(name: string, email: string, phone: string, password: string, passwordConfirmation: string): Promise<void> {
+    const response = await authService.register({ name, email, phone, password, password_confirmation: passwordConfirmation })
     if (!response.success) throw new Error(response.message || 'Registration failed')
     setLoginSuccessMessage('Account created. You can now sign in.')
   }
@@ -492,11 +488,6 @@ function AppContent() {
     if (!response.success || !response.data) throw new Error(response.message || 'Failed to remove profile photo')
     setAuthenticatedUser(response.data)
   }
-  async function updateOwnNotificationSettings(data: UpdateNotificationSettingsData) {
-    const response = await userService.updateNotificationSettings(data)
-    if (!response.success || !response.data) throw new Error(response.message || 'Failed to update notification preferences')
-    setAuthenticatedUser(response.data)
-  }
   async function changeOwnPassword(currentPassword: string, password: string, confirmation: string) {
     const data: ChangePasswordData = { current_password: currentPassword, password, password_confirmation: confirmation }
     const response = await userService.changePassword(data)
@@ -509,7 +500,7 @@ function AppContent() {
   if (view === '2fa') return <><div className="auth-wrapper"><LanguageSelect language={language} onLanguageChange={changeLanguage} /><TwoFactorAuthPage email={pendingAuthEmail} onVerify={handle2FAVerify} onBack={() => setView('landing')} /></div></>
   return <>
     <div className={`app-shell${role === 'resident' ? ' app-shell--resident' : ''}`}>
-      <Header role={role} user={user} language={language} onLanguageChange={changeLanguage} onOpenLogin={handleLogout} reports={reports} categories={categories} users={users} notifications={notifications} onOpenNotification={openNotification} onDeleteNotification={deleteNotification} onDeleteAllNotifications={deleteAllNotifications} onMarkAllNotificationsRead={markAllNotificationsRead} onSelectReport={selectReport} onNavigate={navigate} onSearchUsers={setUserSearchQuery} onUpdateProfile={updateOwnProfile} onUpdateNotifications={updateOwnNotificationSettings} onChangePassword={changeOwnPassword} onNavigateWebsiteContent={navigateToWebsiteContent} onNavigateResidentProfile={() => navigate('resident-profile')} onUploadProfilePhoto={uploadOwnProfilePhoto} onRemoveProfilePhoto={removeOwnProfilePhoto} />
+      <Header role={role} user={user} language={language} onLanguageChange={changeLanguage} onOpenLogin={handleLogout} reports={reports} categories={categories} users={users} notifications={notifications} onOpenNotification={openNotification} onDeleteNotification={deleteNotification} onDeleteAllNotifications={deleteAllNotifications} onMarkAllNotificationsRead={markAllNotificationsRead} onSelectReport={selectReport} onNavigate={navigate} onSearchUsers={setUserSearchQuery} onUpdateProfile={updateOwnProfile} onChangePassword={changeOwnPassword} onNavigateWebsiteContent={navigateToWebsiteContent} onNavigateResidentProfile={() => navigate('resident-profile')} onUploadProfilePhoto={uploadOwnProfilePhoto} onRemoveProfilePhoto={removeOwnProfilePhoto} />
       <div className="app-body">
         {role !== 'resident' && <Sidebar role={role} view={view} onNavigate={navigate} />}
         <main className="main-area">
@@ -522,13 +513,12 @@ function AppContent() {
           {view === 'staff-dashboard' && user?.role === 'staff' && <StaffDashboard reports={reports} categories={categories} userId={user.id} onSelectReport={selectReport} onOpenWorkspace={() => navigate('reports')} isLoading={isReportsLoading} />}
           {(view === 'reports' || view === 'staff-workspace' || view === 'report-attachments') && user && <StaffReportWorkspace key={`${role}-${view}`} reports={reports} categories={categories} role={role} userId={user.id} onSelectReport={role === 'staff' ? openReportFromAttachments : selectReport} onOpenAttachments={role === 'admin' ? () => setIsAdminAttachmentModalOpen(true) : undefined} initialSection={view === 'report-attachments' ? 'attachments' : 'reports'} isLoading={isReportsLoading} />}
           {view === 'map-monitoring' && user && <Suspense fallback={<div className="auth-loading" role="status">Loading map monitoring…</div>}><MapMonitoringPage reports={reports} categories={categories} role={role} userId={user.id} onSelectReport={selectReport} isLoading={isReportsLoading} /></Suspense>}
-          {view === 'admin-dashboard' && <AdminDashboard users={users} reports={reports} categories={categories} notificationSettings={globalNotificationSettings} onToggleNotificationSetting={toggleGlobalPreference} onNavigate={navigate} />}
+          {view === 'admin-dashboard' && <AdminDashboard users={users} reports={reports} categories={categories} onNavigate={navigate} />}
           {view === 'users' && user && <UserManagementPage key={`users-${userSearchQuery}`} users={users} currentUserId={user.id} initialQuery={userSearchQuery} onCreate={addUser} onUpdate={updateUser} onDelete={deleteUser} onToggleActive={toggleUser} onRoleChange={changeUserRole} />}
           {view === 'categories' && <CategoryManagementPage categories={categories} reports={reports} onAdd={addCategory} onUpdate={updateCategory} onToggle={toggleCategory} onDelete={deleteCategory} />}
           {(view === 'analytics-reports' && role === 'admin' || view === 'staff-analytics' && role === 'staff') && <AnalyticsReportsPage reports={reports} categories={categories} onSelectReport={selectReport} isLoading={isReportsLoading} {...(role === 'staff' && user ? { staffId: user.id, staffName: user.name } : {})} />}
           {view === 'audit' && <AuditLogsPage />}
           {view === 'announcements' && role !== 'resident' && <AnnouncementsPage role={role} language={language} currentUserId={user?.id ?? 0} />}
-          {view === 'email-deliveries' && role === 'admin' && <EmailDeliveriesPage />}
           {view === 'website-content' && role === 'admin' && <WebsiteContentPage onClose={() => navigate(websiteSettingsReturnView.current)} />}
           <Footer />
         </main>

@@ -33,16 +33,6 @@ export interface UpdateUserData {
   password?: string
 }
 
-/**
- * Update notification settings data
- */
-export interface UpdateNotificationSettingsData {
-  sms_enabled?: boolean
-  email_enabled?: boolean
-  report_updates_enabled?: boolean
-  resolution_updates_enabled?: boolean
-}
-
 export interface ChangePasswordData {
   current_password: string
   password: string
@@ -156,17 +146,6 @@ export const userService = {
     return apiRequest<User>({
       method: 'POST',
       url: API_ENDPOINTS.VERIFY_CONTACT_CHANGE,
-      data,
-    })
-  },
-
-  /**
-   * Update notification settings
-   */
-  async updateNotificationSettings(data: UpdateNotificationSettingsData): Promise<ApiResponse<User>> {
-    return apiRequest<User>({
-      method: 'PUT',
-      url: API_ENDPOINTS.UPDATE_NOTIFICATION_SETTINGS,
       data,
     })
   },

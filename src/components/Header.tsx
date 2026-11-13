@@ -7,7 +7,7 @@ import type { Category, Notification, Report, User, UserRole } from '../data/typ
 import type { ViewKey } from '../types'
 import AccountMenu from './AccountMenu'
 import ProfilePhoto from './ProfilePhoto'
-import type { UpdateNotificationSettingsData, UpdateProfileData } from '../services/user.service'
+import type { UpdateProfileData } from '../services/user.service'
 
 interface HeaderProps {
   role: UserRole
@@ -27,7 +27,6 @@ interface HeaderProps {
   onNavigate: (view: ViewKey) => void
   onSearchUsers: (query: string) => void
   onUpdateProfile: (data: UpdateProfileData) => Promise<void>
-  onUpdateNotifications: (data: UpdateNotificationSettingsData) => Promise<void>
   onChangePassword: (currentPassword: string, password: string, confirmation: string) => Promise<void>
   onNavigateWebsiteContent: () => void
   onNavigateResidentProfile: () => void
@@ -35,7 +34,7 @@ interface HeaderProps {
   onRemoveProfilePhoto: () => Promise<void>
 }
 
-export default function Header({ role, user, language, onLanguageChange, onOpenLogin, reports, categories, users, notifications, onOpenNotification, onDeleteNotification, onDeleteAllNotifications, onMarkAllNotificationsRead, onSelectReport, onNavigate, onSearchUsers, onUpdateProfile, onUpdateNotifications, onChangePassword, onNavigateWebsiteContent, onNavigateResidentProfile, onUploadProfilePhoto, onRemoveProfilePhoto }: HeaderProps) {
+export default function Header({ role, user, language, onLanguageChange, onOpenLogin, reports, categories, users, notifications, onOpenNotification, onDeleteNotification, onDeleteAllNotifications, onMarkAllNotificationsRead, onSelectReport, onNavigate, onSearchUsers, onUpdateProfile, onChangePassword, onNavigateWebsiteContent, onNavigateResidentProfile, onUploadProfilePhoto, onRemoveProfilePhoto }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [showSignoutConfirmation, setShowSignoutConfirmation] = useState(false)
@@ -328,7 +327,7 @@ export default function Header({ role, user, language, onLanguageChange, onOpenL
       setShowAccountMenu(false)
       setSignoutError(null)
       setShowSignoutConfirmation(true)
-    }} onUpdateProfile={onUpdateProfile} onUpdateNotifications={onUpdateNotifications} onChangePassword={onChangePassword} onUploadProfilePhoto={onUploadProfilePhoto} onRemoveProfilePhoto={onRemoveProfilePhoto} />}
+    }} onUpdateProfile={onUpdateProfile} onChangePassword={onChangePassword} onUploadProfilePhoto={onUploadProfilePhoto} onRemoveProfilePhoto={onRemoveProfilePhoto} />}
     {showEmergencyContacts && createPortal(<div className="emergency-contacts-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) setShowEmergencyContacts(false)
     }}>
@@ -337,8 +336,9 @@ export default function Header({ role, user, language, onLanguageChange, onOpenL
           <div><span className="eyebrow">{language === 'tl' ? 'TULONG PARA SA BACO' : 'BACO EMERGENCY HELP'}</span><h2 id="emergency-contacts-title">{language === 'tl' ? 'Mga emergency contact sa Baco' : 'Baco emergency contacts'}</h2></div>
           <button className="icon-button" type="button" aria-label={language === 'tl' ? 'Isara ang emergency contacts' : 'Close emergency contacts'} onClick={() => setShowEmergencyContacts(false)}><X size={19} /></button>
         </header>
-        <p>{language === 'tl' ? 'Para sa emergency sa Baco, tawagan ang pambansang hotline at ibigay ang barangay at eksaktong lokasyon.' : 'For emergencies in Baco, call a national hotline and provide your barangay and exact location.'}</p>
+        <p>{language === 'tl' ? 'Kung may emergency sa Baco, tawagan ang naaangkop na hotline o ang Munisipyo at ibigay ang barangay at eksaktong lokasyon.' : 'For emergencies in Baco, call the appropriate hotline or municipal office and provide your barangay and exact location.'}</p>
         <a className="emergency-contact-link" href="tel:911"><span><strong>National Emergency Hotline</strong><small>{language === 'tl' ? 'Pulis, bumbero, at medikal na saklolo' : 'Police, fire, and medical emergencies'}</small></span><b>911</b></a>
+        <a className="emergency-contact-link" href="tel:+639660282662"><span><strong>{language === 'tl' ? 'Munisipyo ng Baco' : 'Baco Municipal Hall'}</strong><small>{language === 'tl' ? 'Makipag-ugnayan sa Munisipyo' : 'Contact the municipal office'}</small></span><b>+63 966 028 2662</b></a>
         <a className="emergency-contact-link" href="tel:143"><span><strong>Philippine Red Cross</strong><small>{language === 'tl' ? 'Red Cross hotline' : 'Red Cross hotline'}</small></span><b>143</b></a>
         <small className="emergency-contacts-note">{language === 'tl' ? 'Maaaring mag-iba ang availability depende sa lugar at network.' : 'Availability may vary by location and network.'}</small>
       </section>

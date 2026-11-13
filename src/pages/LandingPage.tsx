@@ -7,7 +7,7 @@ import { websiteContentImageUrl, websiteContentService, type WebsiteContentData 
 
 interface Props {
   onLogin: (email: string, password: string, remember: boolean) => void | Promise<void>
-  onRegister: (name: string, email: string, phone: string, password: string, passwordConfirmation: string, emailEnabled: boolean, smsEnabled: boolean) => void | Promise<void>
+  onRegister: (name: string, email: string, phone: string, password: string, passwordConfirmation: string) => void | Promise<void>
   onGoogleSignIn: (idToken: string, intent: 'sign_in' | 'sign_up') => Promise<void>
   successMessage?: string | null
 }

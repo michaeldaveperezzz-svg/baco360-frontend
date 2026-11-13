@@ -29,7 +29,7 @@ The application expects JWT-based authentication with the following endpoints:
 - `POST /api/reports/:id/comments` - Add comment
 - `POST /api/reports/:id/assign` - Assign to staff
 
-Report email notifications follow each recipient's email and report-update preferences. Status changes, including resolution and rejection details, are emailed to the report's resident. Public staff updates are emailed individually; internal notes are not emailed. Assignment emails go to the selected staff member, and residents are notified by email only when an existing assignment changes to a different staff member. These emails use the existing email delivery log and do not require a new migration.
+Report submissions, status changes, public staff updates, assignments, address verification, and announcements are delivered through in-app notifications. Internal report notes are not shown to residents. Account contact-change verification still uses email; report and announcement notifications do not send email.
 
 #### Admin Endpoints
 - `GET /api/admin/users` - Get all users
@@ -38,12 +38,11 @@ Report email notifications follow each recipient's email and report-update prefe
 - `GET /api/categories` - Get categories
 - `POST /api/categories` - Add category
 - `GET /api/admin/audit-logs` - Get logs
-- `GET /api/admin/email-deliveries` - Review email delivery status (admin only); optional `status=pending|sent|failed`, `page`, and `per_page`
 
 #### Announcements
 - `GET /api/announcements` - Get announcements for the signed-in user
-- `POST /api/announcements` - Publish an announcement (admin/staff); creates in-app recipient records and attempts email delivery to active residents and staff
-- `PUT /api/announcements/:id` - Edit an active announcement (admin/staff); does not resend email
+- `POST /api/announcements` - Publish an announcement (admin/staff); creates in-app recipient records for selected users
+- `PUT /api/announcements/:id` - Edit an active announcement (admin/staff)
 - `PATCH /api/announcements/:id/archive` - Hide an announcement from residents while retaining it for staff/admin
 - `PATCH /api/announcements/:id/restore` - Restore an archived announcement
 - `PATCH /api/announcements/:id/read` - Mark an announcement as read
